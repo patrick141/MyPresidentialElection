@@ -23,3 +23,7 @@ e1.printSummary()
 e1.printStateMargins()
 print(e1.getTippingPointState())
 print(e1.getECBias())
+
+e1.sortByStateMargins();
+print(e1.states);
+e1.printStateMargins()

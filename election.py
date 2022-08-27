@@ -109,7 +109,7 @@ class Election():
     
     def printStatesSummary(self):
         for state in self.states:
-            print(str(state) + " Winner: "  + state.getWinner())
+            print(str(state) + " | Winner: "  + state.getWinner())
             
     
     def printStateMargins(self):
