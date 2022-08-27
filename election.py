@@ -16,6 +16,7 @@ class Election():
         self.year = year
         self.results = {}
         self.minEVNeeded = 270
+        self.totalVote = 0
         self.winner = None
         self.df = None
         self.readElectionData(year)
@@ -44,6 +45,7 @@ class Election():
         demEV = gopEV = 0
         DEM = "Democratic"
         GOP = "Republican"
+        Other = "Other"
         for state in self.states:
             results = state.getResults()
             if state.getWinner() == DEM:
@@ -56,8 +58,7 @@ class Election():
                 continue
             demVote += results[DEM]
             gopVote += results[GOP]
-        print(demVote)
-        print(gopVote)
+            self.totalVote += state.getTotalVote()
         if demVote > gopVote:
             self.winner = DEM
         elif gopVote < demVote:
@@ -66,6 +67,11 @@ class Election():
             self.winner = "TIED"
         self.results[DEM] = demVote, demEV
         self.results[GOP] = gopVote, gopEV
+        self.results[Other] = self.totalVote - (demVote + gopVote)
+    
+    def printSummary(self):
+        winner = self.winner
+        print(winner, " won the election")      
     
     def sortAlphabetically(self):
         self.states.sort(key=lambda x: x.getName())
@@ -141,7 +147,7 @@ class Election():
         return (winParty, margin)
     
     def getTotalVotes(self):
-        return sum(state.getTotalVote() for state in self.states)
+        return self.totalVote
     
     def getECBias(self):
         tpState = self.getTippingPointState()
@@ -150,9 +156,17 @@ class Election():
     def getStatesAsList(self):
         return self.states
     
+    def getStatesWonByParty(self, party):
+        return [state for state in self.states if state.getWinner() == party]
+        
+    
     def compareStates(state1, state2):
         s1P, s1M = state1.getMargin()
         s1P, s1M = state2.getMargin()
+        
+    def getStrongestStateByParty(self, party):
+        self.sortByStateMargins()
+        return self.states[0] if self.states[0].getWinner() == party else self.states[-1]
 
     
     
