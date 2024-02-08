@@ -162,12 +162,22 @@ class Election():
     
     def compareStates(state1, state2):
         s1P, s1M = state1.getMargin()
-        s1P, s1M = state2.getMargin()
+        s2P, s2M = state2.getMargin()
         
     def getStrongestStateByParty(self, party):
         self.sortByStateMargins()
         return self.states[0] if self.states[0].getWinner() == party else self.states[-1]
-
     
-    
-    
+    def applyPercentageShiftToState(self, pState, sParty, sMargin):
+        print(pState.getMargin())
+        pStateParty, pStateMargin = pState.getMargin()
+        oParty = State.getOtherParty(sParty)
+        rState = ""
+        rMargin = 0
+        if sParty == pStateParty:
+            rMargin = pStateMargin + sMargin
+            rState = sParty
+        return (rState, abs(rMargin))
+     
+    def applyVoteShiftToState(self, state, party, vote):
+        state.applyVoteShift(party, vote)

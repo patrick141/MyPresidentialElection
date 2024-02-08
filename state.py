@@ -81,6 +81,14 @@ class State():
         otherParty = self.getOtherParty(self.__winner)
         otherPer = self.getVotePerByParty(otherParty)
         return (self.__winner, votePer - otherPer)
+    
+    def applyVoteShift(self, party, shiftVotes):
+        newResults = self.__results;
+        if party in newResults:
+            newResults[party] += shiftVotes
+            self.setResults(newResults)
+        else:
+            print("Party not in result");
         
     
     def __str__(self):
