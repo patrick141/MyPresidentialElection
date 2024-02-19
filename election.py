@@ -7,8 +7,12 @@ Created on Fri Nov  5 21:29:39 2021
 """
 import pandas as pd
 import re
+import plotly.express as px
+import plotly.graph_objects as go
+
 
 from state import State
+from constants import us_state_to_abbrev
 
 class Election():
     def __init__(self, year):
@@ -169,7 +173,6 @@ class Election():
         return self.states[0] if self.states[0].getWinner() == party else self.states[-1]
     
     def applyPercentageShiftToState(self, pState, sParty, sMargin):
-        print(pState.getMargin())
         pStateParty, pStateMargin = pState.getMargin()
         oParty = State.getOtherParty(sParty)
         rState = ""
@@ -181,3 +184,44 @@ class Election():
      
     def applyVoteShiftToState(self, state, party, vote):
         state.applyVoteShift(party, vote)
+    
+    def adjust_state_margins(self, margin_shift):
+        for state in self.states:
+            # Assume each state has a method to adjust its margin
+            self.applyVoteShiftToState(state, "Dem", margin_shift * 10000)
+        
+    
+    def visualize(self):
+        state_summary = [
+            {"State": state.getName(), "Winner": state.getWinner(), "Votes": state.getVoteByParty(state.getWinner())} 
+            for state in self.states
+        ]
+        df = pd.DataFrame(state_summary)
+        df['State Abbr'] = df['State'].map(us_state_to_abbrev)
+        
+        color_map = {
+            'Democratic': 'blue',
+            'Republican': 'red'
+        }
+        
+        fig = px.choropleth(
+            df,
+            locations='State Abbr',
+            locationmode='USA-states',
+            color='Winner',
+            color_discrete_map=color_map,
+            hover_name='State',
+            hover_data={'Winner': True, 'Votes': ':,', 'State Abbr': False},
+            scope="usa",
+            title=self.year + ' US Election Results'
+        )
+
+        fig.update_layout(
+            geo=dict(
+                lakecolor='rgb(255, 255, 255)'
+            ),
+        )
+
+        fig.show()
+        fig.write_html("election_results_map.html")
+        

@@ -33,13 +33,4 @@ print("---")
 print(e1.getTippingPointState())
 print(e1.getECBias())
 
-
-"""
-print(WI)
-print("====")
-print(WI.getMargin())
-print("====")
-e1.applyVoteShiftToState(WI, DEM, 30000)
-e1.printStateMargins()
-print(WI.getMargin())
-"""
+e1.visualize();
