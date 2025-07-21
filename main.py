@@ -1,9 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Fri Nov  5 21:29:39 2021
-
-@author: pamaro
+Main Class file
 """
 
 from election import Election
@@ -33,4 +29,4 @@ print("---")
 print(e1.getTippingPointState())
 print(e1.getECBias())
 
-e1.visualize();
+e1.visualize()

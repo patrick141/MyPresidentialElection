@@ -1,9 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Thu Feb  8 20:15:28 2024
-
-@author: pamaro
+Constants
 """
 
 us_state_to_abbrev = {

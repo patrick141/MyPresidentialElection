@@ -1,9 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Fri Nov  5 21:29:39 2021
-
-@author: pamaro
+Election class file
 """
 import pandas as pd
 import re
@@ -187,7 +183,6 @@ class Election():
     
     def adjust_state_margins(self, margin_shift):
         for state in self.states:
-            # Assume each state has a method to adjust its margin
             self.applyVoteShiftToState(state, "Dem", margin_shift * 10000)
         
     
