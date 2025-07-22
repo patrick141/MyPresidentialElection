@@ -46,6 +46,7 @@ class Election():
         DEM = "Democratic"
         GOP = "Republican"
         Other = "Other"
+        self.totalVote = 0
         for state in self.states:
             results = state.getResults()
             if state.getWinner() == DEM:
@@ -180,6 +181,7 @@ class Election():
      
     def applyVoteShiftToState(self, state, party, vote):
         state.applyVoteShift(party, vote)
+        self.determineWinner()
     
     def adjust_state_margins(self, margin_shift):
         for state in self.states:
