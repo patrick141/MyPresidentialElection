@@ -1,30 +1,51 @@
 """
-Main Class file
+Main file
 """
 
 from election import Election
 
-e1 = Election('2020')
+e1 = Election("2020")
+
 DEM = "Democratic"
 GOP = "Republican"
-Other = "Other"
-ARI = e1.findStateByName("Arizona")
-GA = e1.findStateByName("Georgia")
-NV = e1.findStateByName("Nevada")
-NC = e1.findStateByName("North Carolina")
-MI = e1.findStateByName("Michigan")
-WI = e1.findStateByName("Wisconsin")
-PA = e1.findStateByName("Pennsylvania")
+OTHER = "Other"
 
-print(e1.getTippingPointState())
-print(e1.getPopularVoteMargin())
-print(e1.getECBias())
-e1.applyVoteShiftToState(NC, DEM, 75000)
-print(NC.getWinner())
-print(NC.getMargin())
-print(NC.getResults())
-print("---")
-print(e1.getPopularVoteMargin())
-print(e1.getTippingPointState())
-print(e1.getECBias())
+# Updated method name: findStateByName -> find_state_by_name
+ARI = e1.find_state_by_name("Arizona")
+GA = e1.find_state_by_name("Georgia")
+NV = e1.find_state_by_name("Nevada")
+NC = e1.find_state_by_name("North Carolina")
+MI = e1.find_state_by_name("Michigan")
+WI = e1.find_state_by_name("Wisconsin")
+PA = e1.find_state_by_name("Pennsylvania")
+
 e1.visualize()
+
+e1.visualize_with_margin_slider()
+
+# Updated method names:
+print(e1.get_tipping_point_state())
+print(e1.get_popular_vote_margin())
+print(e1.get_ec_bias())
+print("---")
+
+print(NC.get_winner())
+print(NC.get_margin())
+print(NC.get_results())
+
+# OLD: e1.applyVoteShiftToState(NC, DEM, 75000)
+# NEW: apply vote boost to ONE STATE (turnout boost)
+NC.apply_margin_shift_to_party(DEM, 5)
+e1.determine_winner()
+print("--- after apply margin shift")
+
+
+print(NC.get_winner())
+print(NC.get_margin())
+print(NC.get_results())
+
+print("---")
+
+print(e1.get_popular_vote_margin())
+print(e1.get_tipping_point_state())
+print(e1.get_ec_bias())
