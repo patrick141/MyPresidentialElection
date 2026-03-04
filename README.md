@@ -120,11 +120,13 @@ Handles:
 # 📁 Project Structure
 
 ```
-├── constants.py
 ├── data/
 │   └── 2020.csv
-├── election.py
-├── state.py
+├── src/
+│   ├── __init__.py
+│   ├── constants.py
+│   ├── election.py
+│   └── state.py
 ├── main.py
 ├── election_results_map.html
 ├── election_results_map_with_margin.html

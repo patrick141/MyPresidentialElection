@@ -88,7 +88,7 @@ class State:
         """
         self._results = self._base_results.copy()
         self.determine_winner()
-    
+
     def get_parent_state(self):
         return self._parent_state
 
@@ -186,7 +186,7 @@ class State:
         """
         Apply a TRUE X-point swing toward target_party measured in TOTAL-vote percentage points,
         keeping 'Other' votes unchanged.
-    
+
         Interpretation:
           - Add +X/2 points to target party's TOTAL-vote share
           - Subtract -X/2 points from opposing party's TOTAL-vote share
@@ -197,17 +197,17 @@ class State:
         """
         if target_party not in ("Democratic", "Republican"):
             return
-    
+
         self._results = self._normalize_results(self._results)
-    
+
         dem = int(self._results.get("Democratic", 0) or 0)
         gop = int(self._results.get("Republican", 0) or 0)
         other = int(self._results.get("Other", 0) or 0)
-    
+
         total = dem + gop + other
         if total <= 0:
             return
-    
+
         # Convert swing toward party into (+X/2 to target, -X/2 from opponent)
         half = float(swing_points) / 2.0
         if target_party == "Democratic":
@@ -216,19 +216,19 @@ class State:
         else:
             dem_target_pct = (dem / total) * 100.0 - half
             gop_target_pct = (gop / total) * 100.0 + half
-    
+
         # Clamp to [0, 100] while respecting that Other stays fixed
         other_pct = (other / total) * 100.0
-    
+
         # Dem + GOP must equal (100 - Other%)
         two_party_pct_total = 100.0 - other_pct
-    
+
         # Clamp Dem% and GOP% within feasible range
         if dem_target_pct < 0.0:
             dem_target_pct = 0.0
         if gop_target_pct < 0.0:
             gop_target_pct = 0.0
-    
+
         # Renormalize Dem/GOP to sum to two_party_pct_total (in case of clamping)
         sum_two = dem_target_pct + gop_target_pct
         if sum_two <= 0:
@@ -239,26 +239,26 @@ class State:
             scale = two_party_pct_total / sum_two
             dem_target_pct *= scale
             gop_target_pct *= scale
-    
+
         # Convert target percents back to votes
         new_dem = int(round((dem_target_pct / 100.0) * total))
         new_gop = int(round((gop_target_pct / 100.0) * total))
-    
+
         # Keep other votes exactly the same; fix rounding drift by adjusting GOP
         new_other = other
         # Ensure totals match exactly
         drift = total - (new_dem + new_gop + new_other)
         new_gop += drift
-    
+
         if new_dem < 0:
             new_dem = 0
         if new_gop < 0:
             new_gop = 0
-    
+
         self._results["Democratic"] = new_dem
         self._results["Republican"] = new_gop
         self._results["Other"] = new_other
-    
+
         self.determine_winner()
 
     def apply_margin_shift(self):

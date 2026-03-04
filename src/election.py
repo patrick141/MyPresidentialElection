@@ -8,13 +8,16 @@ Election class file (updated to match new State class)
   2) margin swing (moves votes between Dem/GOP toward a party)
 """
 
+from pathlib import Path
 import pandas as pd
 import re
 import plotly.express as px
 import plotly.graph_objects as go
 
-from state import State
-from constants import us_state_to_abbrev
+from src.state import State
+from src.constants import us_state_to_abbrev
+
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class Election:
@@ -41,19 +44,19 @@ class Election:
     # -------------------------
 
     def read_election_data(self, year):
-        self.df = pd.read_csv("data/" + str(year) + ".csv")
+        self.df = pd.read_csv(DATA_DIR / f"{year}.csv")
 
         self.states = []
         for _, row in self.df.iterrows():
             name = row["State"]
             ev = int(row["EV"])
-            
+
             unit_type = "district" if "-" in name else "statewide"
             parent_state = None
-            
+
             if unit_type == "district":
                 parent_state = name.split("-")[0]   # "ME" or "NE"
-            
+
             s1 = State(name, ev, unit_type=unit_type, parent_state=parent_state)
 
             # Safely coerce vote values to ints (handles NaN/float)
@@ -196,8 +199,7 @@ class Election:
                 continue  # Block ME/NE split states in Phase 1
             state.apply_margin_shift_to_party(target_party, swing_points)
         self.determine_winner()
-        
-    
+
     def apply_margin_swing_to_state(self, state_name, target_party, swing_points):
         st = self.find_state_by_name(state_name)
         if not st:
@@ -207,7 +209,7 @@ class Election:
             return
         st.apply_margin_shift_to_party(target_party, swing_points)
         self.determine_winner()
-        
+
     def apply_vote_boost_to_state(self, state_name, party, votes):
         st = self.find_state_by_name(state_name)
         if not st:
@@ -284,7 +286,7 @@ class Election:
     # -------------------------
     # Visualization (same as before, updated for snake_case + tossup)
     # -------------------------
-    
+
     def is_split_ev_unit(self, state):
         """
         Returns True for Maine/Nebraska and their district rows.
@@ -316,7 +318,7 @@ class Election:
             "Tossup": "gray",
             "TIED": "gray",
         }
-        
+
         dem_ev = self.results["Democratic"][1]
         gop_ev = self.results["Republican"][1]
         tossup_ev = self.results.get("TossupEV", 0)
@@ -336,19 +338,15 @@ class Election:
                 "State Abbr": False,
             },
             scope="usa",
-            title = f"{self.year} US Election Results | Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev}",
+            title=f"{self.year} US Election Results | Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev}",
         )
 
         fig.update_layout(
             geo=dict(lakecolor="rgb(255, 255, 255)"),
         )
-        dem_ev = self.results["Democratic"][1]
-        gop_ev = self.results["Republican"][1]
-        tossup_ev = self.results.get("TossupEV", 0)
 
         fig.show()
         fig.write_html(output_file)
-    
 
     def visualize_with_margin_slider(
         self,
@@ -362,14 +360,14 @@ class Election:
         Positive shift swings toward Democrats, negative toward Republicans.
         Writes a standalone HTML file.
         """
-    
+
         # --- helpers ---
         def build_frame_df(election_obj):
             rows = []
             for st in election_obj.states:
                 winner = st.get_winner()
                 party, margin = st.get_margin()
-    
+
                 rows.append({
                     "State": st.get_name(),
                     "State Abbr": us_state_to_abbrev.get(st.get_name()),
@@ -378,29 +376,29 @@ class Election:
                     "Margin": round(margin, 2),
                     "Votes": st.get_vote_by_party(winner) if winner not in ("Tossup", "TIED") else 0
                 })
-    
+
             df = pd.DataFrame(rows)
             # drop anything that doesn't map (safety)
             df = df[df["State Abbr"].notna()]
             return df
-    
+
         def winner_to_code(w):
             if w == "Democratic":
                 return -1
             if w == "Republican":
                 return 1
             return 0  # Tossup/TIED
-    
+
         shifts = list(range(min_shift, max_shift + 1, step))
-    
+
         # Build frames
         frames = []
         base_title = f"{self.year} US Election Results — Margin Shift: "
-    
+
         for s in shifts:
             # Reset back to baseline for a clean frame
             self.reset_all_states()
-    
+
             # Apply swing: positive = Democratic, negative = Republican
             if s > 0:
                 self.apply_margin_swing_all_states("Democratic", abs(s))
@@ -408,14 +406,14 @@ class Election:
                 self.apply_margin_swing_all_states("Republican", abs(s))
             else:
                 self.determine_winner()
-    
+
             df = build_frame_df(self)
             z = df["Winner"].apply(winner_to_code)
-    
+
             dem_ev = self.results["Democratic"][1]
             gop_ev = self.results["Republican"][1]
             tossup_ev = self.results.get("TossupEV", 0)
-    
+
             frames.append(
                 go.Frame(
                     name=str(s),
@@ -444,11 +442,11 @@ class Election:
                     ),
                 )
             )
-    
+
         # Start at 0 shift
         start_shift = 0 if 0 in shifts else shifts[len(shifts) // 2]
         start_frame = next(f for f in frames if f.name == str(start_shift))
-    
+
         fig = go.Figure(
             data=start_frame.data,
             frames=frames,
@@ -501,9 +499,9 @@ class Election:
                 ],
             ),
         )
-    
+
         fig.show()
         fig.write_html(output_file)
-    
+
         # IMPORTANT: return to baseline after generating frames
         self.reset_all_states()

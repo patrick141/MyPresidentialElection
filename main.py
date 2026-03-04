@@ -2,7 +2,7 @@
 Main file
 """
 
-from election import Election
+from src.election import Election
 
 e1 = Election("2020")
 
