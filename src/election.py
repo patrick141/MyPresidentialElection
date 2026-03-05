@@ -414,6 +414,9 @@ class Election:
             gop_ev = self.results["Republican"][1]
             tossup_ev = self.results.get("TossupEV", 0)
 
+            pv_party, pv_margin = self.get_popular_vote_margin()
+            pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
+
             frames.append(
                 go.Frame(
                     name=str(s),
@@ -438,7 +441,7 @@ class Election:
                         )
                     ],
                     layout=go.Layout(
-                        title_text=f"{base_title}{s} | Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev}"
+                        title_text=f"{base_title}{s} | Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
                     ),
                 )
             )
@@ -451,7 +454,7 @@ class Election:
             data=start_frame.data,
             frames=frames,
             layout=go.Layout(
-                title_text=f"{base_title}{start_shift}",
+                title_text=start_frame.layout.title.text,
                 geo=dict(scope="usa"),
                 updatemenus=[
                     {
