@@ -4,6 +4,8 @@ An interactive U.S. Presidential Election modeling engine built in Python using 
 
 This project simulates national vote swings and dynamically recalculates state outcomes and Electoral College totals in real time.
 
+![2024 Election Results Map](assets/2024ElectionResultExample.png)
+
 ---
 
 # 🎯 Project Goal
@@ -264,7 +266,7 @@ Planned:
 # 🧪 How to Run
 
 ```bash
-pip install pandas plotly
+pip install -r requirements.txt
 python main.py
 ```
 
