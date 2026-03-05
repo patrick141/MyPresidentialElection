@@ -4,7 +4,7 @@ Main file
 
 from src.election import Election
 
-e1 = Election("2020")
+e1 = Election("2024")
 
 DEM = "Democratic"
 GOP = "Republican"

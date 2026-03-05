@@ -141,7 +141,6 @@ Handles:
 
 * Add toggle between:
 
-  * 2016
   * 2020
   * 2024
 * Dynamic loading of election datasets
@@ -159,17 +158,26 @@ Handles:
 * Export simulation results to structured format (JSON / CSV)
 * Load saved scenarios
 
-## 📥 Data Workflow
+## 📥 Data Source
 
-* Upload custom election datasets
-* Extract modeled results
-* Export processed state-level data
+Current CSV files (`2020.csv`, `2024.csv`) were manually sourced from Wikipedia election results pages and formatted to match the engine's expected schema:
 
-Goal: build a reusable election modeling workflow engine.
+```
+State, EV, Democratic, Republican, Other
+```
+
+> **Stretch Goal:** `scripts/build_year_csv.py` is a placeholder script for automating this process via an external dataset. Not yet implemented — see Phase 3.
 
 ---
 
 # 🗄 Phase 3 (Planned)
+
+## 📥 Automated Data Pipeline *(Stretch Goal)*
+
+* Automate CSV generation via an external election dataset
+* `scripts/build_year_csv.py` is the placeholder — wire up a reliable data source
+* Extend coverage back to earlier election cycles (2012, 2008, and beyond)
+* Consistent CSV schema across all years for drop-in engine compatibility
 
 ## 🧱 Database Integration
 
