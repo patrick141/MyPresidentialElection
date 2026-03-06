@@ -139,26 +139,33 @@ Handles:
 
 # 🔮 Phase 2 (In Progress)
 
-## 🗳 Multi-Election Support
+## ✅ Multi-Election Support
 
-* Add toggle between:
+* Toggle between 2020 and 2024 in a single interactive HTML
+* `Election` accepts a 4-digit year string or any CSV file path
+* Presidential year validation enforced on all inputs
+* Single visualization engine supports multiple years simultaneously
 
-  * 2020
-  * 2024
-* Dynamic loading of election datasets
-* Single visualization engine supporting multiple years
+## ✅ Full State Modification — ME/NE Districts
 
-## 🎛 Full State Modification
+* ME-1, ME-2, NE-1, NE-2, NE-3 now swing with the national slider
+* Results displayed as live-updating colored boxes in the right panel
+* Consistent swing behavior across all statewide + district units
 
-* Allow all states (including ME/NE districts) to be modified via slider
-* Group-based swing logic for split states
-* Consistent swing behavior across statewide + districts
+## ✅ Scenario Saving & Import
 
-## 📊 Scenario Saving
+* `export_scenario(path)` exports current simulated state to CSV or JSON
+* Schema matches `data/YEAR.csv` — exported files are drop-in compatible
+* `Election("scenarios/2024_D+5.csv")` loads any scenario CSV as a new election
+* Presidential year auto-extracted from filename via regex and validated
+* Loaded scenarios plug directly into the multi-year slider as a toggle
 
-* Save custom swing scenarios
-* Export simulation results to structured format (JSON / CSV)
-* Load saved scenarios
+## 🔄 Per-State Individual Control (In Progress)
+
+* Allow targeting a single state with an independent margin shift
+* Separate from the national slider — stack per-state adjustment on top of baseline
+* Backend method `apply_margin_swing_to_state` already implemented
+* UI integration (state selector + individual slider) pending
 
 ## 📥 Data Source
 
@@ -280,8 +287,8 @@ election_results_map_with_margin.html
 
 # 📌 Current Status
 
-*  Phase 1: Complete
-*  Phase 2: Multi-year support + full modification logic
-*  Phase 3: Database integration and backend modularization
+* ✅ Phase 1: Complete
+* 🔄 Phase 2: Mostly complete — per-state individual control in progress
+* 🗄 Phase 3: Database integration and backend modularization (planned)
 
 ---
