@@ -345,11 +345,28 @@ class Election:
         return (rel_party, abs(rel_margin))
 
     def get_tipping_point_state(self):
-        self.sort_by_state_margins()
+        # Use Electoral College EVs to determine the winner, not popular vote.
+        # self.winner is popular-vote based and can differ from the EC winner.
+        dem_ev = self.results.get("Democratic", (0, 0))[1]
+        gop_ev = self.results.get("Republican", (0, 0))[1]
+        if dem_ev >= self.min_ev_needed:
+            ec_winner = "Democratic"
+        elif gop_ev >= self.min_ev_needed:
+            ec_winner = "Republican"
+        else:
+            return None  # 269-269 tie or no majority — no tipping point
+
+        # Sort EC winner's states safest-first (desc margin), accumulate EVs.
+        # The state that reaches min_ev_needed is the tipping point.
+        winner_states = sorted(
+            [s for s in self.states if s.get_winner() == ec_winner],
+            key=lambda s: s.get_margin()[1],
+            reverse=True,
+        )
         ev_count = 0
-        for state in self.states:
+        for state in winner_states:
             ev_count += state.get_ev()
-            if ev_count > self.min_ev_needed:
+            if ev_count >= self.min_ev_needed:
                 return state
         return None
 
