@@ -52,8 +52,9 @@ def _build_state_df(election_obj):
             "EV":         st.get_ev(),
             "Margin":     round(margin, 2),
             "Votes":      st.get_vote_by_party(winner) if winner not in ("Tossup", "TIED") else 0,
-            "Dem_Votes":  st.get_vote_by_party("Democratic"),
-            "Rep_Votes":  st.get_vote_by_party("Republican"),
+            "Dem_Votes":   st.get_vote_by_party("Democratic"),
+            "Rep_Votes":   st.get_vote_by_party("Republican"),
+            "Other_Votes": st.get_vote_by_party("Other"),
         })
     df = pd.DataFrame(rows)
     return df[df["State Abbr"].notna()]
@@ -156,6 +157,20 @@ def _reapply_state_overrides(election_obj, overrides):
         election_obj.determine_winner()
 
 
+def _get_tp_info(election_obj):
+    """
+    Returns (tp_abbr, tp_name) for the tipping point state.
+    Saves and restores election_obj.states order because
+    get_tipping_point_state() calls sort_by_state_margins() in-place.
+    """
+    saved_order = list(election_obj.states)
+    tp = election_obj.get_tipping_point_state()
+    election_obj.states = saved_order
+    if not tp:
+        return "", "N/A"
+    return us_state_to_abbrev.get(tp.get_name(), ""), tp.get_name()
+
+
 def _build_per_state_post_script(baseline_js, default_key):
     """
     Builds the post_script string injected into the HTML after Plotly renders.
@@ -214,6 +229,11 @@ def visualize_multi_year_slider(
             df = _build_state_df(election)
             z = df["Winner"].apply(_winner_to_code).tolist()
 
+            tp_abbr, tp_name = _get_tp_info(election)
+            df["TP_Flag"] = df["State Abbr"].apply(
+                lambda a: "★ Tipping Point" if a == tp_abbr else ""
+            )
+
             dem_ev = election.results["Democratic"][1]
             gop_ev = election.results["Republican"][1]
             tossup_ev = election.results.get("TossupEV", 0)
@@ -221,15 +241,16 @@ def visualize_multi_year_slider(
             pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
             title = (
                 f"{key} US Election Results — Margin Shift: {s} | "
-                f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
+                f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label} | TP: {tp_name}"
             )
 
             year_data[key].append({
                 "locations":  df["State Abbr"].tolist(),
                 "z":          z,
-                "customdata": df[["Winner", "EV", "Margin", "Votes"]].values.tolist(),
+                "customdata": df[["Winner", "EV", "Margin", "Votes", "TP_Flag"]].values.tolist(),
                 "title":      title,
                 "districts":  _collect_districts(election),
+                "tp_abbr":    tp_abbr,
             })
 
             # Capture signed margins + vote data at shift=0 for JS per-state control
@@ -240,9 +261,11 @@ def visualize_multi_year_slider(
                 ]
                 baseline_js[key] = {
                     "locations":      df["State Abbr"].tolist(),
+                    "state_names":    df["State"].tolist(),
                     "signed_margins": signed,
                     "dem_votes":      df["Dem_Votes"].tolist(),
                     "rep_votes":      df["Rep_Votes"].tolist(),
+                    "other_votes":    df["Other_Votes"].tolist(),
                     "evs":            df["EV"].tolist(),
                 }
 
@@ -260,11 +283,16 @@ def visualize_multi_year_slider(
             d = year_data[key][i]
             relayout = {"title.text": d["title"]}
             relayout.update(_district_relayout(d["districts"]))
+            tp = [d["tp_abbr"]] if d["tp_abbr"] else []
             steps.append({
                 "label": str(s),
                 "method": "update",
                 "args": [
-                    {"locations": [d["locations"]], "z": [d["z"]], "customdata": [d["customdata"]]},
+                    {
+                        "locations":  [d["locations"], tp],
+                        "z":          [d["z"],          [0] if tp else []],
+                        "customdata": [d["customdata"], [[]]],
+                    },
                     relayout,
                 ],
             })
@@ -280,11 +308,16 @@ def visualize_multi_year_slider(
             "sliders[0].active": zero_idx,
         }
         relayout.update(_district_relayout(d["districts"]))
+        tp = [d["tp_abbr"]] if d["tp_abbr"] else []
         year_buttons.append({
             "label": key,
             "method": "update",
             "args": [
-                {"locations": [d["locations"]], "z": [d["z"]], "customdata": [d["customdata"]]},
+                {
+                    "locations":  [d["locations"], tp],
+                    "z":          [d["z"],          [0] if tp else []],
+                    "customdata": [d["customdata"], [[]]],
+                },
                 relayout,
             ],
         })
@@ -333,22 +366,34 @@ def visualize_multi_year_slider(
     # ------------------------------------------------------------------
     # Build figure
     # ------------------------------------------------------------------
+    default_tp = [default["tp_abbr"]] if default["tp_abbr"] else []
     fig = go.Figure(
         frames=all_frames,
-        data=[go.Choropleth(
-            locations=default["locations"],
-            z=default["z"],
-            locationmode="USA-states",
-            zmin=-1, zmax=1,
-            colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
-            showscale=False,
-            customdata=default["customdata"],
-            hovertemplate=(
-                "<b>%{location}</b><br>Winner: %{customdata[0]}<br>"
-                "EV: %{customdata[1]}<br>Margin: %{customdata[2]}%<br>"
-                "Votes: %{customdata[3]:,}<extra></extra>"
+        data=[
+            go.Choropleth(
+                locations=default["locations"],
+                z=default["z"],
+                locationmode="USA-states",
+                zmin=-1, zmax=1,
+                colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
+                showscale=False,
+                customdata=default["customdata"],
+                hovertemplate=(
+                    "<b>%{location}</b><br>Winner: %{customdata[0]}<br>"
+                    "EV: %{customdata[1]}<br>Margin: %{customdata[2]}%<br>"
+                    "Votes: %{customdata[3]:,}<br>%{customdata[4]}<extra></extra>"
+                ),
             ),
-        )],
+            go.Choropleth(
+                locations=default_tp,
+                z=[0] if default_tp else [],
+                locationmode="USA-states",
+                zmin=0, zmax=0,
+                colorscale=[[0, "rgba(255,215,0,0.45)"], [1, "rgba(255,215,0,0.45)"]],
+                showscale=False,
+                hoverinfo="skip",
+            ),
+        ],
         layout=go.Layout(
             title_text=default["title"],
             geo=dict(scope="usa", domain=dict(x=[0.0, 0.88], y=[0.0, 1.0])),
