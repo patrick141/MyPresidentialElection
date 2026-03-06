@@ -17,7 +17,8 @@ from src.constants import us_state_to_abbrev
 
 load_dotenv()
 
-_JS_PATH = Path(__file__).parent / "per_state_control.js"
+_JS_PATH       = Path(__file__).parent / "per_state_control.js"
+_JS_UTILS_PATH = Path(__file__).parent / "utils.js"
 _DISTRICT_ORDER = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"]
 _PANEL_X = 0.89
 _DISTRICT_Y_POSITIONS = [0.73, 0.66, 0.59, 0.52, 0.45]
@@ -176,11 +177,11 @@ def _build_per_state_post_script(baseline_js, default_key):
     Builds the post_script string injected into the HTML after Plotly renders.
     Embeds baseline data as JS variables and loads per_state_control.js logic.
     """
-    js_template = _JS_PATH.read_text()
     return (
         f"var PER_STATE_BASELINE = {json.dumps(baseline_js)};\n"
         f"var PER_STATE_DEFAULT_KEY = {json.dumps(default_key)};\n"
-        + js_template
+        + _JS_UTILS_PATH.read_text() + "\n"
+        + _JS_PATH.read_text()
     )
 
 
@@ -259,14 +260,27 @@ def visualize_multi_year_slider(
                     row["Margin"] if row["Winner"] == "Democratic" else -row["Margin"]
                     for _, row in df.iterrows()
                 ]
+                # Congressional districts (ME-1/2, NE-1/2/3) are filtered out of the
+                # choropleth df but their EVs must be counted in the JS title/TP logic.
+                dist_baselines = []
+                for st in election.states:
+                    if st.get_parent_state() is None:
+                        continue
+                    dparty, dmargin = st.get_margin()
+                    dsigned = dmargin if dparty == "Democratic" else -dmargin
+                    dist_baselines.append({
+                        "ev": st.get_ev(),
+                        "signed_margin": round(dsigned, 4),
+                    })
                 baseline_js[key] = {
-                    "locations":      df["State Abbr"].tolist(),
-                    "state_names":    df["State"].tolist(),
-                    "signed_margins": signed,
-                    "dem_votes":      df["Dem_Votes"].tolist(),
-                    "rep_votes":      df["Rep_Votes"].tolist(),
-                    "other_votes":    df["Other_Votes"].tolist(),
-                    "evs":            df["EV"].tolist(),
+                    "locations":         df["State Abbr"].tolist(),
+                    "state_names":       df["State"].tolist(),
+                    "signed_margins":    signed,
+                    "dem_votes":         df["Dem_Votes"].tolist(),
+                    "rep_votes":         df["Rep_Votes"].tolist(),
+                    "other_votes":       df["Other_Votes"].tolist(),
+                    "evs":               df["EV"].tolist(),
+                    "district_baselines": dist_baselines,
                 }
 
         election.reset_all_states()
