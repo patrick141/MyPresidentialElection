@@ -9,6 +9,7 @@ map visualization with an interactive margin shift slider.
 
 from pathlib import Path
 import os
+import json
 import pandas as pd
 import re
 import plotly.express as px
@@ -139,6 +140,38 @@ class Election:
         print("Dem:", self.results.get("Democratic"))
         print("GOP:", self.results.get("Republican"))
         print("TossupEV:", self.results.get("TossupEV"))
+
+    # -------------------------
+    # Export
+    # -------------------------
+
+    def export_scenario(self, output_file="scenario.csv"):
+        """
+        Exports the current simulated state of all states to CSV or JSON.
+        Format mirrors data/YEAR.csv: State, EV, Democratic, Republican, Other.
+        JSON output is a list of objects, one per state/district row.
+        File format is auto-detected from the extension (.csv or .json).
+        """
+        Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+
+        rows = [
+            {
+                "State":       st.get_name(),
+                "EV":          st.get_ev(),
+                "Democratic":  int(st.get_results().get("Democratic", 0)),
+                "Republican":  int(st.get_results().get("Republican", 0)),
+                "Other":       int(st.get_results().get("Other", 0)),
+            }
+            for st in self.states
+        ]
+
+        if output_file.endswith(".json"):
+            with open(output_file, "w") as f:
+                json.dump(rows, f, indent=2)
+        else:
+            pd.DataFrame(rows).to_csv(output_file, index=False)
+
+        print(f"Scenario exported → {output_file}")
 
     # -------------------------
     # Sorting / lookup

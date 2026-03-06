@@ -17,28 +17,19 @@ e2024.visualize()
 # Multi-year interactive map with year toggle (2020 / 2024)
 visualize_multi_year_slider([e2020, e2024])
 
-# Analytics for 2024
-NC = e2024.find_state_by_name("North Carolina")
+# --- Scenario Export ---
+# Baseline 2024 (no shift)
+e2024.export_scenario("scenarios/2024_baseline.csv")
+e2024.export_scenario("scenarios/2024_baseline.json")
 
-print(e2024.get_tipping_point_state())
-print(e2024.get_popular_vote_margin())
-print(e2024.get_ec_bias())
-print("---")
+# D+5 national swing
+e2024.apply_margin_swing_all_states(DEM, 5)
+e2024.export_scenario("scenarios/2024_D+5.csv")
+e2024.export_scenario("scenarios/2024_D+5.json")
+e2024.reset_all_states()
 
-print(NC.get_winner())
-print(NC.get_margin())
-print(NC.get_results())
-
-NC.apply_margin_shift_to_party(DEM, 5)
-e2024.determine_winner()
-print("--- after apply margin shift")
-
-print(NC.get_winner())
-print(NC.get_margin())
-print(NC.get_results())
-
-print("---")
-
-print(e2024.get_popular_vote_margin())
-print(e2024.get_tipping_point_state())
-print(e2024.get_ec_bias())
+# R+5 national swing
+e2024.apply_margin_swing_all_states(GOP, 5)
+e2024.export_scenario("scenarios/2024_R+5.csv")
+e2024.export_scenario("scenarios/2024_R+5.json")
+e2024.reset_all_states()
