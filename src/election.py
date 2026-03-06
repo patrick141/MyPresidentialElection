@@ -8,10 +8,14 @@ map visualization with an interactive margin shift slider.
 """
 
 from pathlib import Path
+import os
 import pandas as pd
 import re
 import plotly.express as px
 import plotly.graph_objects as go
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.state import State
 from src.constants import us_state_to_abbrev
@@ -552,7 +556,6 @@ def visualize_multi_year_slider(
 
     # Precompute all data per year per shift: (locations, z, customdata, title)
     year_data = {}
-    all_frames = []
 
     for election in elections:
         year = str(election.year)
@@ -580,36 +583,12 @@ def visualize_multi_year_slider(
                 f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
             )
 
-            entry = {
+            year_data[year].append({
                 "locations": df["State Abbr"].tolist(),
                 "z":         z.tolist(),
                 "customdata": df[["Winner", "EV", "Margin", "Votes"]].values.tolist(),
                 "title":     title,
-            }
-            year_data[year].append(entry)
-
-            # Frames are only used by the Play button — not by the slider
-            all_frames.append(go.Frame(
-                name=f"{year}_{s}",
-                data=[go.Choropleth(
-                    locations=entry["locations"],
-                    z=entry["z"],
-                    locationmode="USA-states",
-                    zmin=-1, zmax=1,
-                    colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
-                    showscale=False,
-                    customdata=entry["customdata"],
-                    hovertemplate=(
-                        "<b>%{location}</b><br>"
-                        "Winner: %{customdata[0]}<br>"
-                        "EV: %{customdata[1]}<br>"
-                        "Margin: %{customdata[2]}%<br>"
-                        "Votes: %{customdata[3]:,}"
-                        "<extra></extra>"
-                    ),
-                )],
-                layout=go.Layout(title_text=title),
-            ))
+            })
 
         election.reset_all_states()
 
@@ -660,6 +639,66 @@ def visualize_multi_year_slider(
             ],
         })
 
+    show_play = os.getenv("SHOW_PLAY_BUTTON", "false").lower() == "true"
+
+    # Build frames only when Play button is enabled
+    all_frames = []
+    if show_play:
+        for election in elections:
+            year = str(election.year)
+            for i, s in enumerate(shifts):
+                d = year_data[year][i]
+                all_frames.append(go.Frame(
+                    name=f"{year}_{s}",
+                    data=[go.Choropleth(
+                        locations=d["locations"],
+                        z=d["z"],
+                        locationmode="USA-states",
+                        zmin=-1, zmax=1,
+                        colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
+                        showscale=False,
+                        customdata=d["customdata"],
+                        hovertemplate=(
+                            "<b>%{location}</b><br>"
+                            "Winner: %{customdata[0]}<br>"
+                            "EV: %{customdata[1]}<br>"
+                            "Margin: %{customdata[2]}%<br>"
+                            "Votes: %{customdata[3]:,}"
+                            "<extra></extra>"
+                        ),
+                    )],
+                    layout=go.Layout(title_text=d["title"]),
+                ))
+
+    updatemenus = []
+    if show_play:
+        updatemenus.append({
+            "type": "buttons",
+            "showactive": False,
+            "x": 0.02, "y": 0.95,
+            "buttons": [{
+                "label": "Play",
+                "method": "animate",
+                "args": [
+                    [f"{default_year}_{s}" for s in shifts],
+                    {
+                        "frame": {"duration": 500, "redraw": True},
+                        "fromcurrent": False,
+                        "transition": {"duration": 0},
+                    },
+                ],
+            }],
+        })
+    updatemenus.append({
+        "type": "buttons",
+        "showactive": True,
+        "x": 0.98, "y": 0.98,
+        "xanchor": "right",
+        "yanchor": "top",
+        "direction": "right",
+        "buttons": year_buttons,
+    })
+
     fig = go.Figure(
         frames=all_frames,
         data=[go.Choropleth(
@@ -682,36 +721,7 @@ def visualize_multi_year_slider(
         layout=go.Layout(
             title_text=default["title"],
             geo=dict(scope="usa"),
-            updatemenus=[
-                # Play button — explicitly triggered, sweeps R-shift to D-shift
-                {
-                    "type": "buttons",
-                    "showactive": False,
-                    "x": 0.02, "y": 0.95,
-                    "buttons": [{
-                        "label": "Play",
-                        "method": "animate",
-                        "args": [
-                            [f"{default_year}_{s}" for s in shifts],
-                            {
-                                "frame": {"duration": 500, "redraw": True},
-                                "fromcurrent": False,
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                    }],
-                },
-                # Year toggle buttons
-                {
-                    "type": "buttons",
-                    "showactive": True,
-                    "x": 0.98, "y": 0.98,
-                    "xanchor": "right",
-                    "yanchor": "top",
-                    "direction": "right",
-                    "buttons": year_buttons,
-                },
-            ],
+            updatemenus=updatemenus,
             sliders=[{
                 "active": zero_idx,
                 "currentvalue": {"prefix": "Margin Shift: "},
