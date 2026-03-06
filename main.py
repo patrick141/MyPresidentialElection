@@ -2,14 +2,18 @@
 Main file
 """
 
-from src.election import Election, visualize_multi_year_slider
-
-e2020 = Election("2020")
-e2024 = Election("2024")
+from src.election import Election
+from src.visualize import visualize_multi_year_slider
 
 DEM = "Democratic"
 GOP = "Republican"
 OTHER = "Other"
+
+e2020 = Election("2020")
+#e2020.apply_margin_swing_to_state("Minnesota", GOP, 10)
+#e2020.determine_winner()
+
+e2024 = Election("2024")
 
 # --- Scenario Export (must run before loading scenario files below) ---
 # Baseline 2024 (no shift)
