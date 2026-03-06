@@ -25,9 +25,54 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class Election:
-    def __init__(self, year):
+    # Presidential elections occur every 4 years starting 1788
+    _VALID_YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
+
+    @staticmethod
+    def _validate_presidential_year(year_int):
+        if year_int % 4 != 0 or not (1788 <= year_int <= 2100):
+            raise ValueError(
+                f"{year_int} is not a valid U.S. presidential election year. "
+                "Must be divisible by 4 and between 1788 and 2100."
+            )
+
+    def __init__(self, year_or_path, label=None):
+        """
+        Args:
+            year_or_path: A 4-digit year string ("2024") or a path to any CSV file
+                          ("scenarios/2024_D+5.csv"). Year strings load from data/.
+            label:        Optional display label used in visualizations (year toggle
+                          buttons, titles). Defaults to year string or CSV filename stem.
+        """
         self.states = []
-        self.year = year
+
+        p = Path(str(year_or_path))
+        if p.suffix.lower() == ".csv":
+            # Path-based load: regex-extract the election year from the filename
+            self._data_path = p
+            match = self._VALID_YEAR_RE.search(p.stem)
+            if not match:
+                raise ValueError(
+                    f"Cannot determine election year from filename '{p.name}'. "
+                    "Filename must contain a year like 2020 or 2024 (e.g. 2024_D+5.csv)."
+                )
+            year_int = int(match.group(1))
+            self._validate_presidential_year(year_int)
+            self.year = str(year_int)
+            self.label = label or p.stem          # e.g. "2024_D+5"
+        else:
+            # Year-string load: validate directly
+            try:
+                year_int = int(year_or_path)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f"'{year_or_path}' is not a valid year or CSV path. "
+                    "Pass a 4-digit year (e.g. '2024') or a path ending in .csv."
+                )
+            self._validate_presidential_year(year_int)
+            self._data_path = DATA_DIR / f"{year_or_path}.csv"
+            self.year = str(year_int)
+            self.label = label or self.year       # e.g. "2024"
 
         # results summary:
         # self.results["Democratic"] = (total_votes, total_ev)
@@ -41,14 +86,21 @@ class Election:
         self.winner = None
         self.df = None
 
-        self.read_election_data(year)
+        self.read_election_data()
 
     # -------------------------
     # Data load / reset
     # -------------------------
 
-    def read_election_data(self, year):
-        self.df = pd.read_csv(DATA_DIR / f"{year}.csv")
+    def read_election_data(self):
+        if not self._data_path.exists():
+            raise FileNotFoundError(f"Election data not found: {self._data_path}")
+
+        required_cols = {"State", "EV", "Democratic", "Republican", "Other"}
+        self.df = pd.read_csv(self._data_path)
+        missing = required_cols - set(self.df.columns)
+        if missing:
+            raise ValueError(f"CSV missing required columns: {missing}")
 
         self.states = []
         for _, row in self.df.iterrows():
@@ -229,10 +281,9 @@ class Election:
         """
         Swings each state's two-party results toward target_party by swing_points.
         swing_points is percentage points of two-party total.
+        Includes ME/NE congressional districts.
         """
         for state in self.states:
-            if state.get_parent_state() is not None:
-                continue  # Block ME/NE split states in Phase 1
             state.apply_margin_shift_to_party(target_party, swing_points)
         self.determine_winner()
 
@@ -601,8 +652,8 @@ def visualize_multi_year_slider(
     year_data = {}
 
     for election in elections:
-        year = str(election.year)
-        year_data[year] = []
+        key = election.label
+        year_data[key] = []
 
         for s in shifts:
             election.reset_all_states()
@@ -623,7 +674,7 @@ def visualize_multi_year_slider(
             pv_party, pv_margin = election.get_popular_vote_margin()
             pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
             title = (
-                f"{year} US Election Results — Margin Shift: {s} | "
+                f"{election.label} US Election Results — Margin Shift: {s} | "
                 f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
             )
 
@@ -646,7 +697,7 @@ def visualize_multi_year_slider(
                 for d in DISTRICT_ORDER
             ]
 
-            year_data[year].append({
+            year_data[key].append({
                 "locations":  df["State Abbr"].tolist(),
                 "z":          z.tolist(),
                 "customdata": df[["Winner", "EV", "Margin", "Votes"]].values.tolist(),
@@ -657,9 +708,9 @@ def visualize_multi_year_slider(
         election.reset_all_states()
 
     # Default: most recent election, shift = 0
-    default_year = str(elections[-1].year)
+    default_key = elections[-1].label
     zero_idx = shifts.index(0) if 0 in shifts else len(shifts) // 2
-    default = year_data[default_year][zero_idx]
+    default = year_data[default_key][zero_idx]
 
     def district_relayout(districts):
         """Returns relayout keys to update the 5 district annotation boxes."""
@@ -670,11 +721,11 @@ def visualize_multi_year_slider(
             out[f"annotations[{j + 1}].bgcolor"] = d["color"]
         return out
 
-    def make_slider_steps(year):
+    def make_slider_steps(key):
         """Slider steps use restyle+relayout — no animation, instant redraw."""
         steps = []
         for i, s in enumerate(shifts):
-            d = year_data[year][i]
+            d = year_data[key][i]
             relayout = {"title.text": d["title"]}
             relayout.update(district_relayout(d["districts"]))
             steps.append({
@@ -694,16 +745,16 @@ def visualize_multi_year_slider(
     # Year toggle buttons
     year_buttons = []
     for election in elections:
-        year = str(election.year)
-        d = year_data[year][zero_idx]
+        key = election.label
+        d = year_data[key][zero_idx]
         relayout = {
             "title.text":        d["title"],
-            "sliders[0].steps":  make_slider_steps(year),
+            "sliders[0].steps":  make_slider_steps(key),
             "sliders[0].active": zero_idx,
         }
         relayout.update(district_relayout(d["districts"]))
         year_buttons.append({
-            "label": year,
+            "label": key,
             "method": "update",
             "args": [
                 {
@@ -721,11 +772,11 @@ def visualize_multi_year_slider(
     all_frames = []
     if show_play:
         for election in elections:
-            year = str(election.year)
+            key = election.label
             for i, s in enumerate(shifts):
-                d = year_data[year][i]
+                d = year_data[key][i]
                 all_frames.append(go.Frame(
-                    name=f"{year}_{s}",
+                    name=f"{key}_{s}",
                     data=[go.Choropleth(
                         locations=d["locations"],
                         z=d["z"],
@@ -756,7 +807,7 @@ def visualize_multi_year_slider(
                 "label": "Play",
                 "method": "animate",
                 "args": [
-                    [f"{default_year}_{s}" for s in shifts],
+                    [f"{default_key}_{s}" for s in shifts],
                     {
                         "frame": {"duration": 500, "redraw": True},
                         "fromcurrent": False,
@@ -844,7 +895,7 @@ def visualize_multi_year_slider(
                 "active": zero_idx,
                 "currentvalue": {"prefix": "Margin Shift: "},
                 "pad": {"t": 50},
-                "steps": make_slider_steps(default_year),
+                "steps": make_slider_steps(default_key),
             }],
         ),
     )
