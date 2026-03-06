@@ -528,8 +528,12 @@ def visualize_multi_year_slider(
     Builds a single interactive HTML map supporting multiple election years.
     Year toggle buttons swap the map data and rewire the margin slider.
     Positive shift = Democratic swing, negative = Republican swing.
+    Congressional district results (ME-1/2, NE-1/2/3) shown as colored boxes
+    on the right panel, also updated by the slider.
     No animation — slider directly redraws the map on each step.
     """
+
+    DISTRICT_ORDER = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"]
 
     def build_frame_df(election_obj):
         rows = []
@@ -545,6 +549,7 @@ def visualize_multi_year_slider(
                 "Votes":      st.get_vote_by_party(winner) if winner not in ("Tossup", "TIED") else 0,
             })
         df = pd.DataFrame(rows)
+        # Districts have no State Abbr — filtered here, shown separately as boxes
         return df[df["State Abbr"].notna()]
 
     def winner_to_code(w):
@@ -552,9 +557,14 @@ def visualize_multi_year_slider(
         if w == "Republican": return 1
         return 0
 
+    def winner_to_color(w):
+        if w == "Democratic": return "royalblue"
+        if w == "Republican": return "crimson"
+        return "dimgray"
+
     shifts = list(range(min_shift, max_shift + 1, step))
 
-    # Precompute all data per year per shift: (locations, z, customdata, title)
+    # Precompute all data per year per shift
     year_data = {}
 
     for election in elections:
@@ -563,12 +573,13 @@ def visualize_multi_year_slider(
 
         for s in shifts:
             election.reset_all_states()
-            if s > 0:
-                election.apply_margin_swing_all_states("Democratic", abs(s))
-            elif s < 0:
-                election.apply_margin_swing_all_states("Republican", abs(s))
-            else:
-                election.determine_winner()
+            # Apply swing to ALL states including districts (visualization only)
+            for st in election.states:
+                if s > 0:
+                    st.apply_margin_shift_to_party("Democratic", abs(s))
+                elif s < 0:
+                    st.apply_margin_shift_to_party("Republican", abs(s))
+            election.determine_winner()
 
             df = build_frame_df(election)
             z = df["Winner"].apply(winner_to_code)
@@ -583,11 +594,31 @@ def visualize_multi_year_slider(
                 f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
             )
 
+            # Collect district results in fixed order
+            district_map = {}
+            for st in election.states:
+                if st.get_parent_state() is not None:
+                    winner = st.get_winner()
+                    party, margin = st.get_margin()
+                    if winner in ("Tossup", "TIED"):
+                        text = f"<b>{st.get_name()}</b>  Tossup"
+                    else:
+                        text = f"<b>{st.get_name()}</b>  {party[0]}+{margin:.1f}%"
+                    district_map[st.get_name()] = {
+                        "text": text,
+                        "color": winner_to_color(winner),
+                    }
+            districts = [
+                district_map.get(d, {"text": f"<b>{d}</b>  N/A", "color": "dimgray"})
+                for d in DISTRICT_ORDER
+            ]
+
             year_data[year].append({
-                "locations": df["State Abbr"].tolist(),
-                "z":         z.tolist(),
+                "locations":  df["State Abbr"].tolist(),
+                "z":          z.tolist(),
                 "customdata": df[["Winner", "EV", "Margin", "Votes"]].values.tolist(),
-                "title":     title,
+                "title":      title,
+                "districts":  districts,
             })
 
         election.reset_all_states()
@@ -597,45 +628,57 @@ def visualize_multi_year_slider(
     zero_idx = shifts.index(0) if 0 in shifts else len(shifts) // 2
     default = year_data[default_year][zero_idx]
 
+    def district_relayout(districts):
+        """Returns relayout keys to update the 5 district annotation boxes."""
+        out = {}
+        for j, d in enumerate(districts):
+            # annotation[0] is the static header; districts start at index 1
+            out[f"annotations[{j + 1}].text"] = d["text"]
+            out[f"annotations[{j + 1}].bgcolor"] = d["color"]
+        return out
+
     def make_slider_steps(year):
         """Slider steps use restyle+relayout — no animation, instant redraw."""
-        return [
-            {
+        steps = []
+        for i, s in enumerate(shifts):
+            d = year_data[year][i]
+            relayout = {"title.text": d["title"]}
+            relayout.update(district_relayout(d["districts"]))
+            steps.append({
                 "label": str(s),
                 "method": "update",
                 "args": [
-                    {   # restyle: swap map data
-                        "locations": [year_data[year][i]["locations"]],
-                        "z":         [year_data[year][i]["z"]],
-                        "customdata":[year_data[year][i]["customdata"]],
+                    {
+                        "locations": [d["locations"]],
+                        "z":         [d["z"]],
+                        "customdata":[d["customdata"]],
                     },
-                    {   # relayout: update title
-                        "title.text": year_data[year][i]["title"],
-                    },
+                    relayout,
                 ],
-            }
-            for i, s in enumerate(shifts)
-        ]
+            })
+        return steps
 
     # Year toggle buttons
     year_buttons = []
     for election in elections:
         year = str(election.year)
         d = year_data[year][zero_idx]
+        relayout = {
+            "title.text":        d["title"],
+            "sliders[0].steps":  make_slider_steps(year),
+            "sliders[0].active": zero_idx,
+        }
+        relayout.update(district_relayout(d["districts"]))
         year_buttons.append({
             "label": year,
             "method": "update",
             "args": [
-                {   # restyle: show this year's 0-shift map
+                {
                     "locations": [d["locations"]],
                     "z":         [d["z"]],
                     "customdata":[d["customdata"]],
                 },
-                {   # relayout: rewire slider + title
-                    "title.text":          d["title"],
-                    "sliders[0].steps":    make_slider_steps(year),
-                    "sliders[0].active":   zero_idx,
-                },
+                relayout,
             ],
         })
 
@@ -692,12 +735,53 @@ def visualize_multi_year_slider(
     updatemenus.append({
         "type": "buttons",
         "showactive": True,
-        "x": 0.98, "y": 0.98,
+        "x": 0.86, "y": 0.98,
         "xanchor": "right",
         "yanchor": "top",
         "direction": "right",
         "buttons": year_buttons,
     })
+
+    # Build district annotation panel (static header + 5 colored district boxes)
+    PANEL_X = 0.89
+    default_districts = default["districts"]
+    district_y_positions = [0.73, 0.66, 0.59, 0.52, 0.45]
+
+    district_annotations = [
+        # Static header (annotation[0])
+        dict(
+            text="<b>Congressional<br>Districts</b>",
+            x=PANEL_X, y=0.82,
+            xref="paper", yref="paper",
+            showarrow=False,
+            bgcolor="white",
+            bordercolor="lightgray",
+            borderwidth=1,
+            borderpad=6,
+            font=dict(size=11, color="#333"),
+            align="center",
+            xanchor="left",
+            yanchor="top",
+        )
+    ]
+    # District boxes (annotation[1] through annotation[5])
+    for j, d in enumerate(default_districts):
+        district_annotations.append(dict(
+            text=d["text"],
+            x=PANEL_X,
+            y=district_y_positions[j],
+            xref="paper", yref="paper",
+            showarrow=False,
+            bgcolor=d["color"],
+            bordercolor="white",
+            borderwidth=1,
+            borderpad=6,
+            font=dict(size=11, color="white"),
+            align="left",
+            xanchor="left",
+            yanchor="middle",
+            width=130,
+        ))
 
     fig = go.Figure(
         frames=all_frames,
@@ -720,7 +804,8 @@ def visualize_multi_year_slider(
         )],
         layout=go.Layout(
             title_text=default["title"],
-            geo=dict(scope="usa"),
+            geo=dict(scope="usa", domain=dict(x=[0.0, 0.88], y=[0.0, 1.0])),
+            annotations=district_annotations,
             updatemenus=updatemenus,
             sliders=[{
                 "active": zero_idx,
