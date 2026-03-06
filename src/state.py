@@ -1,12 +1,9 @@
 """
-State class (improved)
+State class
 
-- Keeps baseline results (base_results) and current simulated results (results)
-- Supports:
-  1) apply_vote_shift: add votes to one party only (total votes increases)
-  2) apply_margin_shift_to_party: swing margin toward Dem/GOP by moving votes (total constant for Dem+GOP)
-- All original methods exist, but in snake_case
-- Python 3.8 compatible (no list[str], no PEP604 unions, no typing.List)
+Represents a single state (or ME/NE congressional district) in a presidential election.
+Stores both baseline and simulated vote results, tracks the winner, and supports
+vote shift and margin swing operations for simulation purposes.
 """
 
 OTHER_PARTY = "Other"

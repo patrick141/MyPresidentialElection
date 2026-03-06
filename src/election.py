@@ -1,11 +1,10 @@
 """
-Election class file (updated to match new State class)
+Election class
 
-- Uses snake_case State methods
-- Supports baseline/current results stored inside State
-- Supports:
-  1) vote boost (adds votes to one party only)
-  2) margin swing (moves votes between Dem/GOP toward a party)
+Manages a full presidential election cycle. Loads state-level results from CSV,
+aggregates Electoral College and popular vote totals, and provides simulation
+methods for applying national vote swings and turnout boosts. Also handles
+map visualization with an interactive margin shift slider.
 """
 
 from pathlib import Path
@@ -508,3 +507,219 @@ class Election:
 
         # IMPORTANT: return to baseline after generating frames
         self.reset_all_states()
+
+
+# ---------------------------------------------------------------------------
+# Multi-year visualization — standalone function
+# ---------------------------------------------------------------------------
+
+def visualize_multi_year_slider(
+    elections,
+    output_file="election_results_map_with_margin.html",
+    min_shift=-10,
+    max_shift=10,
+    step=1
+):
+    """
+    Builds a single interactive HTML map supporting multiple election years.
+    Year toggle buttons swap the map data and rewire the margin slider.
+    Positive shift = Democratic swing, negative = Republican swing.
+    No animation — slider directly redraws the map on each step.
+    """
+
+    def build_frame_df(election_obj):
+        rows = []
+        for st in election_obj.states:
+            winner = st.get_winner()
+            party, margin = st.get_margin()
+            rows.append({
+                "State":      st.get_name(),
+                "State Abbr": us_state_to_abbrev.get(st.get_name()),
+                "Winner":     winner,
+                "EV":         st.get_ev(),
+                "Margin":     round(margin, 2),
+                "Votes":      st.get_vote_by_party(winner) if winner not in ("Tossup", "TIED") else 0,
+            })
+        df = pd.DataFrame(rows)
+        return df[df["State Abbr"].notna()]
+
+    def winner_to_code(w):
+        if w == "Democratic": return -1
+        if w == "Republican": return 1
+        return 0
+
+    shifts = list(range(min_shift, max_shift + 1, step))
+
+    # Precompute all data per year per shift: (locations, z, customdata, title)
+    year_data = {}
+    all_frames = []
+
+    for election in elections:
+        year = str(election.year)
+        year_data[year] = []
+
+        for s in shifts:
+            election.reset_all_states()
+            if s > 0:
+                election.apply_margin_swing_all_states("Democratic", abs(s))
+            elif s < 0:
+                election.apply_margin_swing_all_states("Republican", abs(s))
+            else:
+                election.determine_winner()
+
+            df = build_frame_df(election)
+            z = df["Winner"].apply(winner_to_code)
+
+            dem_ev = election.results["Democratic"][1]
+            gop_ev = election.results["Republican"][1]
+            tossup_ev = election.results.get("TossupEV", 0)
+            pv_party, pv_margin = election.get_popular_vote_margin()
+            pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
+            title = (
+                f"{year} US Election Results — Margin Shift: {s} | "
+                f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label}"
+            )
+
+            entry = {
+                "locations": df["State Abbr"].tolist(),
+                "z":         z.tolist(),
+                "customdata": df[["Winner", "EV", "Margin", "Votes"]].values.tolist(),
+                "title":     title,
+            }
+            year_data[year].append(entry)
+
+            # Frames are only used by the Play button — not by the slider
+            all_frames.append(go.Frame(
+                name=f"{year}_{s}",
+                data=[go.Choropleth(
+                    locations=entry["locations"],
+                    z=entry["z"],
+                    locationmode="USA-states",
+                    zmin=-1, zmax=1,
+                    colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
+                    showscale=False,
+                    customdata=entry["customdata"],
+                    hovertemplate=(
+                        "<b>%{location}</b><br>"
+                        "Winner: %{customdata[0]}<br>"
+                        "EV: %{customdata[1]}<br>"
+                        "Margin: %{customdata[2]}%<br>"
+                        "Votes: %{customdata[3]:,}"
+                        "<extra></extra>"
+                    ),
+                )],
+                layout=go.Layout(title_text=title),
+            ))
+
+        election.reset_all_states()
+
+    # Default: most recent election, shift = 0
+    default_year = str(elections[-1].year)
+    zero_idx = shifts.index(0) if 0 in shifts else len(shifts) // 2
+    default = year_data[default_year][zero_idx]
+
+    def make_slider_steps(year):
+        """Slider steps use restyle+relayout — no animation, instant redraw."""
+        return [
+            {
+                "label": str(s),
+                "method": "update",
+                "args": [
+                    {   # restyle: swap map data
+                        "locations": [year_data[year][i]["locations"]],
+                        "z":         [year_data[year][i]["z"]],
+                        "customdata":[year_data[year][i]["customdata"]],
+                    },
+                    {   # relayout: update title
+                        "title.text": year_data[year][i]["title"],
+                    },
+                ],
+            }
+            for i, s in enumerate(shifts)
+        ]
+
+    # Year toggle buttons
+    year_buttons = []
+    for election in elections:
+        year = str(election.year)
+        d = year_data[year][zero_idx]
+        year_buttons.append({
+            "label": year,
+            "method": "update",
+            "args": [
+                {   # restyle: show this year's 0-shift map
+                    "locations": [d["locations"]],
+                    "z":         [d["z"]],
+                    "customdata":[d["customdata"]],
+                },
+                {   # relayout: rewire slider + title
+                    "title.text":          d["title"],
+                    "sliders[0].steps":    make_slider_steps(year),
+                    "sliders[0].active":   zero_idx,
+                },
+            ],
+        })
+
+    fig = go.Figure(
+        frames=all_frames,
+        data=[go.Choropleth(
+            locations=default["locations"],
+            z=default["z"],
+            locationmode="USA-states",
+            zmin=-1, zmax=1,
+            colorscale=[[0, "blue"], [0.5, "gray"], [1, "red"]],
+            showscale=False,
+            customdata=default["customdata"],
+            hovertemplate=(
+                "<b>%{location}</b><br>"
+                "Winner: %{customdata[0]}<br>"
+                "EV: %{customdata[1]}<br>"
+                "Margin: %{customdata[2]}%<br>"
+                "Votes: %{customdata[3]:,}"
+                "<extra></extra>"
+            ),
+        )],
+        layout=go.Layout(
+            title_text=default["title"],
+            geo=dict(scope="usa"),
+            updatemenus=[
+                # Play button — explicitly triggered, sweeps R-shift to D-shift
+                {
+                    "type": "buttons",
+                    "showactive": False,
+                    "x": 0.02, "y": 0.95,
+                    "buttons": [{
+                        "label": "Play",
+                        "method": "animate",
+                        "args": [
+                            [f"{default_year}_{s}" for s in shifts],
+                            {
+                                "frame": {"duration": 500, "redraw": True},
+                                "fromcurrent": False,
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    }],
+                },
+                # Year toggle buttons
+                {
+                    "type": "buttons",
+                    "showactive": True,
+                    "x": 0.98, "y": 0.98,
+                    "xanchor": "right",
+                    "yanchor": "top",
+                    "direction": "right",
+                    "buttons": year_buttons,
+                },
+            ],
+            sliders=[{
+                "active": zero_idx,
+                "currentvalue": {"prefix": "Margin Shift: "},
+                "pad": {"t": 50},
+                "steps": make_slider_steps(default_year),
+            }],
+        ),
+    )
+
+    fig.show()
+    fig.write_html(output_file)

@@ -2,50 +2,43 @@
 Main file
 """
 
-from src.election import Election
+from src.election import Election, visualize_multi_year_slider
 
-e1 = Election("2024")
+e2020 = Election("2020")
+e2024 = Election("2024")
 
 DEM = "Democratic"
 GOP = "Republican"
 OTHER = "Other"
 
-# Updated method name: findStateByName -> find_state_by_name
-ARI = e1.find_state_by_name("Arizona")
-GA = e1.find_state_by_name("Georgia")
-NV = e1.find_state_by_name("Nevada")
-NC = e1.find_state_by_name("North Carolina")
-MI = e1.find_state_by_name("Michigan")
-WI = e1.find_state_by_name("Wisconsin")
-PA = e1.find_state_by_name("Pennsylvania")
+# Static map for 2024
+e2024.visualize()
 
-e1.visualize()
+# Multi-year interactive map with year toggle (2020 / 2024)
+visualize_multi_year_slider([e2020, e2024])
 
-e1.visualize_with_margin_slider()
+# Analytics for 2024
+NC = e2024.find_state_by_name("North Carolina")
 
-# Updated method names:
-print(e1.get_tipping_point_state())
-print(e1.get_popular_vote_margin())
-print(e1.get_ec_bias())
+print(e2024.get_tipping_point_state())
+print(e2024.get_popular_vote_margin())
+print(e2024.get_ec_bias())
 print("---")
 
 print(NC.get_winner())
 print(NC.get_margin())
 print(NC.get_results())
 
-# OLD: e1.applyVoteShiftToState(NC, DEM, 75000)
-# NEW: apply vote boost to ONE STATE (turnout boost)
 NC.apply_margin_shift_to_party(DEM, 5)
-e1.determine_winner()
+e2024.determine_winner()
 print("--- after apply margin shift")
 
-
 print(NC.get_winner())
 print(NC.get_margin())
 print(NC.get_results())
 
 print("---")
 
-print(e1.get_popular_vote_margin())
-print(e1.get_tipping_point_state())
-print(e1.get_ec_bias())
+print(e2024.get_popular_vote_margin())
+print(e2024.get_tipping_point_state())
+print(e2024.get_ec_bias())
