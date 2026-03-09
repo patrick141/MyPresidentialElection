@@ -137,7 +137,7 @@ Handles:
 
 ---
 
-# 🔮 Phase 2 (In Progress)
+# 🏁 Phase 2 (Complete)
 
 ## ✅ Multi-Election Support
 
@@ -151,6 +151,7 @@ Handles:
 * ME-1, ME-2, NE-1, NE-2, NE-3 now swing with the national slider
 * Results displayed as live-updating colored boxes in the right panel
 * Consistent swing behavior across all statewide + district units
+* Fixed: district EVs (5) and DC EVs (3) were previously missing from JS Electoral College totals — now correctly counted via `district_baselines` and `constants.py` aliases
 
 ## ✅ Scenario Saving & Import
 
@@ -158,14 +159,22 @@ Handles:
 * Schema matches `data/YEAR.csv` — exported files are drop-in compatible
 * `Election("scenarios/2024_D+5.csv")` loads any scenario CSV as a new election
 * Presidential year auto-extracted from filename via regex and validated
-* Loaded scenarios plug directly into the multi-year slider as a toggle
+* Loaded scenarios plug directly into the multi-year slider as a new toggle button
+* In-browser Export CSV button captures current state including per-state overrides
 
-## 🔄 Per-State Individual Control (In Progress)
+## ✅ Per-State Individual Control
 
-* Allow targeting a single state with an independent margin shift
-* Separate from the national slider — stack per-state adjustment on top of baseline
-* Backend method `apply_margin_swing_to_state` already implemented
-* UI integration (state selector + individual slider) pending
+* Click any state on the map to open a floating per-state swing panel
+* Independent per-state slider (±10 points) stacks on top of the state's baseline
+* Panel displays D+/R+ label, state name, Reset State, and Reset All controls
+* Panel closes on outside click or X button
+* EV totals, popular vote margin, and tipping point state update in real time
+* **Mode toggle bar** below the map separates two exclusive swing modes:
+  * **Map Swing** — national margin slider shifts all states together; per-state panel disabled
+  * **State Swing** — national slider locked; click any state to set its individual swing
+* Switching years resets both modes to Map Swing baseline cleanly
+
+> **Tradeoff:** Combining a national swing with simultaneous per-state overrides in one unified mode was not achievable due to Plotly's pre-computed frame rendering — slider frames hard-overwrite the map trace, destroying per-state customizations. The two modes are mutually exclusive. Unified control (national + per-state simultaneously) is carried forward to Phase 3.
 
 ## 📥 Data Source
 
@@ -180,6 +189,12 @@ State, EV, Democratic, Republican, Other
 ---
 
 # 🗄 Phase 3 (Planned)
+
+## 🔄 Unified Swing Control *(Carried from Phase 2)*
+
+* Combine national margin slider and per-state overrides in one unified mode
+* User sets a national swing AND independently adjusts individual states on top of it
+* Requires replacing Plotly's pre-computed slider frames with a custom HTML range input that calls the JS rendering engine directly — eliminating the frame-overwrite limitation
 
 ## 📥 Automated Data Pipeline *(Stretch Goal)*
 
@@ -288,7 +303,7 @@ election_results_map_with_margin.html
 # 📌 Current Status
 
 * ✅ Phase 1: Complete
-* 🔄 Phase 2: Mostly complete — per-state individual control in progress
-* 🗄 Phase 3: Database integration and backend modularization (planned)
+* ✅ Phase 2: Complete — per-state individual control delivered with mode toggle; unified national + per-state swing moved to Phase 3
+* 🗄 Phase 3: Unified swing control, database integration, and backend modularization (planned)
 
 ---
