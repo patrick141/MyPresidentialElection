@@ -2,37 +2,34 @@
 Main file
 """
 
-from src.election import Election, visualize_multi_year_slider
-
-e2020 = Election("2020")
-e2024 = Election("2024")
+from src.election import Election
+from src.visualize import visualize_multi_year_slider
 
 DEM = "Democratic"
 GOP = "Republican"
 OTHER = "Other"
 
-# --- Scenario Export (must run before loading scenario files below) ---
-# Baseline 2024 (no shift)
-e2024.export_scenario("scenarios/2024_baseline.csv")
-e2024.export_scenario("scenarios/2024_baseline.json")
+e2020 = Election("2020")
+#e2020.apply_margin_swing_to_state("Minnesota", GOP, 10)
+#e2020.determine_winner()
 
-# D+5 national swing
-e2024.apply_margin_swing_all_states(DEM, 5)
-e2024.export_scenario("scenarios/2024_D+5.csv")
-e2024.export_scenario("scenarios/2024_D+5.json")
-e2024.reset_all_states()
+e2024 = Election("2024")
 
-# R+5 national swing
-e2024.apply_margin_swing_all_states(GOP, 5)
-e2024.export_scenario("scenarios/2024_R+5.csv")
-e2024.export_scenario("scenarios/2024_R+5.json")
-e2024.reset_all_states()
+# --- Scenario Export (uncomment any block below to generate CSV/JSON files) ---
+# e2024.export_scenario("scenarios/2024_baseline.csv")
+# e2024.export_scenario("scenarios/2024_baseline.json")
 
-# Static map for 2024
-e2024.visualize()
+# D+5 national swing — uncomment to export
+# e2024.apply_margin_swing_all_states(DEM, 5)
+# e2024.export_scenario("scenarios/2024_D+5.csv")
+# e2024.export_scenario("scenarios/2024_D+5.json")
+# e2024.reset_all_states()
 
-# Load an exported scenario from a CSV path
-e2024_d5 = Election("scenarios/2024_D+5.csv")
+# R+5 national swing — uncomment to export
+# e2024.apply_margin_swing_all_states(GOP, 5)
+# e2024.export_scenario("scenarios/2024_R+5.csv")
+# e2024.export_scenario("scenarios/2024_R+5.json")
+# e2024.reset_all_states()
 
-# Multi-year interactive map with year toggle (2020 / 2024 / 2024_D+5 scenario)
-visualize_multi_year_slider([e2020, e2024, e2024_d5])
+# Multi-year interactive map with year toggle (2020 / 2024)
+visualize_multi_year_slider([e2020, e2024])
