@@ -4,6 +4,17 @@
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Filename sanitization
+// Strips characters that could produce misleading alert/confirm dialog text.
+// Allows alphanumeric, spaces, hyphens, underscores, dots, and parentheses;
+// replaces everything else with underscores and truncates to 60 characters.
+// ---------------------------------------------------------------------------
+function sanitizeFilename(name) {
+  // Replace any character outside the safe set with an underscore
+  return String(name).replace(/[^\w\s\-_.()]/g, "_").slice(0, 60);
+}
+
+// ---------------------------------------------------------------------------
 // Presidential year validation
 // Mirrors Election._validate_presidential_year in election.py
 // ---------------------------------------------------------------------------

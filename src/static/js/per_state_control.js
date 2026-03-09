@@ -300,9 +300,10 @@
   // Reads a user-selected CSV file, validates it, and registers it as a new year toggle button.
   // The imported election is computed across all existing slider shifts before being added.
   function importCSV(file) {
+    const fileName = sanitizeFilename(file.name)
     // Reject files whose names don't contain a valid presidential year
-    if (!yearFromFilename(file.name)) {
-      alert("\"" + file.name + "\" must contain a presidential year (divisible by 4, 1788–2100).");
+    if (!yearFromFilename(fileName)) {
+      alert("\"" + fileName + "\" must contain a presidential year (divisible by 4, 1788–2100).");
       return;
     }
     var reader = new FileReader();
@@ -311,7 +312,8 @@
       if (!rows) { alert("CSV must have columns: State, EV, Democratic, Republican, Other"); return; }
       // Use the filename stem (without .csv) as the election key and toggle button label
       var key = file.name.replace(/\.csv$/i, "");
-      if (PER_STATE_BASELINE[key] && !confirm("\"" + key + "\" already loaded. Replace?")) return;
+      var sanitizedkey = sanitizeFilename(key)
+      if (PER_STATE_BASELINE[key] && !confirm("\"" + sanitizedkey + "\" already loaded. Replace?")) return;
 
       // Read current slider shift labels to build matching frames for the imported election
       var steps   = plotDiv.layout.sliders[0].steps;
