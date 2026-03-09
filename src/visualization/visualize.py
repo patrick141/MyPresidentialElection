@@ -13,13 +13,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-from src.constants import us_state_to_abbrev
+from src.model.constants import us_state_to_abbrev
 
 load_dotenv()
 
 # Paths to the JS files injected as post_script into the exported HTML
-_JS_PATH       = Path(__file__).parent / "per_state_control.js"
-_JS_UTILS_PATH = Path(__file__).parent / "utils.js"
+_JS_PATH       = Path(__file__).parent.parent / "static" / "js" / "per_state_control.js"
+_JS_UTILS_PATH = Path(__file__).parent.parent / "static" / "js" / "utils.js"
 
 # Order and y-positions for the five congressional district annotation boxes
 _DISTRICT_ORDER = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"]

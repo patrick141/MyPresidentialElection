@@ -13,11 +13,11 @@ import re
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.state import State
-from src.constants import us_state_to_abbrev
+from src.model.state import State
+from src.model.constants import us_state_to_abbrev
 
 # Default directory for canonical election CSV files (data/YEAR.csv)
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
 
 class Election:

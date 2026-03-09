@@ -2,8 +2,8 @@
 Main entry point — instantiates Election objects and launches the interactive map.
 """
 
-from src.election import Election
-from src.visualize import visualize_multi_year_slider
+from src.model.election import Election
+from src.visualization.visualize import visualize_multi_year_slider
 
 # Party name aliases used throughout simulation calls
 DEM = "Democratic"
