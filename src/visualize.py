@@ -17,8 +17,11 @@ from src.constants import us_state_to_abbrev
 
 load_dotenv()
 
+# Paths to the JS files injected as post_script into the exported HTML
 _JS_PATH       = Path(__file__).parent / "per_state_control.js"
 _JS_UTILS_PATH = Path(__file__).parent / "utils.js"
+
+# Order and y-positions for the five congressional district annotation boxes
 _DISTRICT_ORDER = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"]
 _PANEL_X = 0.89
 _DISTRICT_Y_POSITIONS = [0.73, 0.66, 0.59, 0.52, 0.45]
@@ -29,19 +32,24 @@ _DISTRICT_Y_POSITIONS = [0.73, 0.66, 0.59, 0.52, 0.45]
 # ---------------------------------------------------------------------------
 
 def _winner_to_code(w):
+    # Converts winner string to a numeric z-value used by the choropleth colorscale
     if w == "Democratic": return -1
     if w == "Republican": return 1
     return 0
 
 
 def _winner_to_color(w):
+    # Maps a winner string to the display color used in district annotation boxes
     if w == "Democratic": return "royalblue"
     if w == "Republican": return "crimson"
     return "dimgray"
 
 
 def _build_state_df(election_obj):
-    """DataFrame of statewide results only (districts filtered out)."""
+    """
+    Builds a DataFrame of statewide results only, filtering out congressional districts.
+    Rows without a valid state abbreviation (e.g. unmapped names) are dropped.
+    """
     rows = []
     for st in election_obj.states:
         winner = st.get_winner()
@@ -58,16 +66,21 @@ def _build_state_df(election_obj):
             "Other_Votes": st.get_vote_by_party("Other"),
         })
     df = pd.DataFrame(rows)
+    # Drop any rows where the state abbreviation lookup returned None
     return df[df["State Abbr"].notna()]
 
 
 def _collect_districts(election_obj):
-    """Returns list of district annotation dicts in DISTRICT_ORDER."""
+    """
+    Returns a list of annotation dicts for the five congressional districts in DISTRICT_ORDER.
+    Districts missing from the election data fall back to an N/A gray box.
+    """
     district_map = {}
     for st in election_obj.states:
         if st.get_parent_state() is not None:
             winner = st.get_winner()
             party, margin = st.get_margin()
+            # Format the annotation text based on whether the district is a tossup
             text = (
                 f"<b>{st.get_name()}</b>  Tossup"
                 if winner in ("Tossup", "TIED")
@@ -81,7 +94,10 @@ def _collect_districts(election_obj):
 
 
 def _district_relayout(districts):
-    """Relayout keys to update district annotation boxes (indices 1–5)."""
+    """
+    Builds a relayout dict that updates district annotation text and background color.
+    Indices 1–5 correspond to the five district boxes (index 0 is the header).
+    """
     out = {}
     for j, d in enumerate(districts):
         out[f"annotations[{j + 1}].text"] = d["text"]
@@ -90,7 +106,11 @@ def _district_relayout(districts):
 
 
 def _build_district_annotations(default_districts):
-    """Build static header + 5 colored district box annotations."""
+    """
+    Builds the static Plotly annotations list: one header box and five colored district boxes.
+    These are placed to the right of the map using paper-relative coordinates.
+    """
+    # Header label above the district boxes
     annotations = [
         dict(
             text="<b>Congressional<br>Districts</b>",
@@ -107,6 +127,7 @@ def _build_district_annotations(default_districts):
             yanchor="top",
         )
     ]
+    # One colored annotation box per district in display order
     for j, d in enumerate(default_districts):
         annotations.append(dict(
             text=d["text"],
@@ -129,11 +150,12 @@ def _build_district_annotations(default_districts):
 
 def _capture_state_overrides(election_obj):
     """
-    Returns {state_name: signed_delta} for any states that have been manually
-    shifted from their baseline. Positive = D lean, negative = R lean.
+    Returns a dict of {state_name: signed_delta} for states manually shifted from baseline.
+    Positive delta = Democratic lean; negative = Republican lean.
     """
     overrides = {}
     for st in election_obj.states:
+        # Skip congressional districts — only statewide states can be overridden
         if st.get_parent_state() is not None:
             continue
         party, margin = st.get_margin()
@@ -142,13 +164,17 @@ def _capture_state_overrides(election_obj):
         total = sum(br.values()) or 1
         base_signed = (br.get("Democratic", 0) / total - br.get("Republican", 0) / total) * 100
         delta = round(current_signed - base_signed, 6)
+        # Only record states that have meaningfully diverged from baseline
         if abs(delta) > 0.001:
             overrides[st.get_name()] = delta
     return overrides
 
 
 def _reapply_state_overrides(election_obj, overrides):
-    """Re-apply per-state overrides after a reset."""
+    """
+    Re-applies previously captured per-state overrides after a national reset.
+    Called inside the slider frame loop to preserve per-state adjustments across shifts.
+    """
     for state_name, delta in overrides.items():
         st = election_obj.find_state_by_name(state_name)
         if st:
@@ -160,13 +186,12 @@ def _reapply_state_overrides(election_obj, overrides):
 
 def _get_tp_info(election_obj):
     """
-    Returns (tp_abbr, tp_name) for the tipping point state.
-    Saves and restores election_obj.states order because
-    get_tipping_point_state() calls sort_by_state_margins() in-place.
+    Returns (tp_abbr, tp_name) for the current tipping point state.
+    Saves and restores self.states order because get_tipping_point_state sorts in place.
     """
     saved_order = list(election_obj.states)
     tp = election_obj.get_tipping_point_state()
-    election_obj.states = saved_order
+    election_obj.states = saved_order   # restore order after in-place sort
     if not tp:
         return "", "N/A"
     return us_state_to_abbrev.get(tp.get_name(), ""), tp.get_name()
@@ -174,8 +199,8 @@ def _get_tp_info(election_obj):
 
 def _build_per_state_post_script(baseline_js, default_key):
     """
-    Builds the post_script string injected into the HTML after Plotly renders.
-    Embeds baseline data as JS variables and loads per_state_control.js logic.
+    Builds the JavaScript post_script injected into the HTML after Plotly renders.
+    Embeds baseline data as JS variables and concatenates utils.js + per_state_control.js.
     """
     return (
         f"var PER_STATE_BASELINE = {json.dumps(baseline_js)};\n"
@@ -198,26 +223,28 @@ def visualize_multi_year_slider(
 ):
     """
     Builds a single interactive HTML map supporting multiple election years.
-    - Year toggle buttons swap the map and rewire the margin slider.
-    - Congressional district results shown as colored boxes on the right panel.
-    - Per-state individual control via click-on-map + JS-injected slider.
-    - No animation — slider directly redraws the map on each step.
+    Year toggle buttons swap the map and rewire the margin slider for that year.
+    Congressional district results are shown as colored annotation boxes on the right.
+    Per-state swing is available via the mode toggle bar injected below the map.
     """
     shifts = list(range(min_shift, max_shift + 1, step))
+    # Index of the zero-shift (baseline) frame within the shifts list
     zero_idx = shifts.index(0) if 0 in shifts else len(shifts) // 2
 
     # ------------------------------------------------------------------
-    # Precompute all data: year_data[key][shift_idx]
+    # Precompute all slider frames: year_data[key][shift_idx]
     # ------------------------------------------------------------------
     year_data = {}
-    baseline_js = {}   # signed margins at shift=0 for JS per-state control
+    baseline_js = {}   # signed margins + vote data at shift=0, used by JS per-state control
 
     for election in elections:
         key = election.label
         year_data[key] = []
+        # Capture any pre-existing per-state overrides before the frame loop resets them
         state_overrides = _capture_state_overrides(election)
 
         for i, s in enumerate(shifts):
+            # Always reset to baseline before applying each shift for clean frame data
             election.reset_all_states()
             for st in election.states:
                 if s > 0:
@@ -225,12 +252,14 @@ def visualize_multi_year_slider(
                 elif s < 0:
                     st.apply_margin_shift_to_party("Republican", abs(s))
             election.determine_winner()
+            # Re-apply any pre-existing per-state overrides on top of the national shift
             _reapply_state_overrides(election, state_overrides)
 
             df = _build_state_df(election)
             z = df["Winner"].apply(_winner_to_code).tolist()
 
             tp_abbr, tp_name = _get_tp_info(election)
+            # Flag the tipping point state in the hover tooltip customdata
             df["TP_Flag"] = df["State Abbr"].apply(
                 lambda a: "★ Tipping Point" if a == tp_abbr else ""
             )
@@ -254,14 +283,14 @@ def visualize_multi_year_slider(
                 "tp_abbr":    tp_abbr,
             })
 
-            # Capture signed margins + vote data at shift=0 for JS per-state control
+            # At shift=0, capture baseline signed margins and vote counts for the JS layer
             if i == zero_idx:
                 signed = [
                     row["Margin"] if row["Winner"] == "Democratic" else -row["Margin"]
                     for _, row in df.iterrows()
                 ]
-                # Congressional districts (ME-1/2, NE-1/2/3) are filtered out of the
-                # choropleth df but their EVs must be counted in the JS title/TP logic.
+                # Congressional districts are not in the choropleth df; collect their
+                # EVs separately so the JS can include them in the 270-check and title
                 dist_baselines = []
                 for st in election.states:
                     if st.get_parent_state() is None:
@@ -273,28 +302,31 @@ def visualize_multi_year_slider(
                         "signed_margin": round(dsigned, 4),
                     })
                 baseline_js[key] = {
-                    "locations":         df["State Abbr"].tolist(),
-                    "state_names":       df["State"].tolist(),
-                    "signed_margins":    signed,
-                    "dem_votes":         df["Dem_Votes"].tolist(),
-                    "rep_votes":         df["Rep_Votes"].tolist(),
-                    "other_votes":       df["Other_Votes"].tolist(),
-                    "evs":               df["EV"].tolist(),
+                    "locations":          df["State Abbr"].tolist(),
+                    "state_names":        df["State"].tolist(),
+                    "signed_margins":     signed,
+                    "dem_votes":          df["Dem_Votes"].tolist(),
+                    "rep_votes":          df["Rep_Votes"].tolist(),
+                    "other_votes":        df["Other_Votes"].tolist(),
+                    "evs":                df["EV"].tolist(),
                     "district_baselines": dist_baselines,
                 }
 
+        # Always return the election to baseline after all frames are built
         election.reset_all_states()
 
     # ------------------------------------------------------------------
-    # Build slider steps and year buttons
+    # Build slider steps and year toggle buttons
     # ------------------------------------------------------------------
     default_key = elections[0].label
     default = year_data[default_key][zero_idx]
 
     def make_slider_steps(key):
+        """Builds the list of Plotly slider step dicts for a given election year."""
         steps = []
         for i, s in enumerate(shifts):
             d = year_data[key][i]
+            # Each step updates the map trace (restyle) and the title + annotations (relayout)
             relayout = {"title.text": d["title"]}
             relayout.update(_district_relayout(d["districts"]))
             tp = [d["tp_abbr"]] if d["tp_abbr"] else []
@@ -312,6 +344,7 @@ def visualize_multi_year_slider(
             })
         return steps
 
+    # Each year button swaps the map to that year's baseline and rewires slider steps
     year_buttons = []
     for election in elections:
         key = election.label
@@ -337,11 +370,12 @@ def visualize_multi_year_slider(
         })
 
     # ------------------------------------------------------------------
-    # Optional Play button + frames
+    # Optional Play button + animation frames (controlled by env var)
     # ------------------------------------------------------------------
     show_play = os.getenv("SHOW_PLAY_BUTTON", "false").lower() == "true"
     all_frames = []
     if show_play:
+        # Build one go.Frame per shift per year for the Play animation
         for election in elections:
             key = election.label
             for i, s in enumerate(shifts):
@@ -362,6 +396,7 @@ def visualize_multi_year_slider(
                     layout=go.Layout(title_text=d["title"]),
                 ))
 
+    # Build the updatemenus list — always includes year buttons; Play is optional
     updatemenus = []
     if show_play:
         updatemenus.append({
@@ -378,7 +413,9 @@ def visualize_multi_year_slider(
     })
 
     # ------------------------------------------------------------------
-    # Build figure
+    # Assemble the Plotly figure with two traces:
+    #   trace 0 — main choropleth (state colors)
+    #   trace 1 — tipping point overlay (gold highlight)
     # ------------------------------------------------------------------
     default_tp = [default["tp_abbr"]] if default["tp_abbr"] else []
     fig = go.Figure(
@@ -398,6 +435,7 @@ def visualize_multi_year_slider(
                     "Votes: %{customdata[3]:,}<br>%{customdata[4]}<extra></extra>"
                 ),
             ),
+            # Semi-transparent gold overlay that marks the tipping point state
             go.Choropleth(
                 locations=default_tp,
                 z=[0] if default_tp else [],
@@ -410,6 +448,7 @@ def visualize_multi_year_slider(
         ],
         layout=go.Layout(
             title_text=default["title"],
+            # Map occupies ~88% of width; right 12% reserved for district annotation panel
             geo=dict(scope="usa", domain=dict(x=[0.0, 0.88], y=[0.0, 1.0])),
             annotations=_build_district_annotations(default["districts"]),
             updatemenus=updatemenus,
@@ -422,6 +461,7 @@ def visualize_multi_year_slider(
         ),
     )
 
+    # Inject JS baseline data and interaction logic as a post-render script
     post_script = _build_per_state_post_script(baseline_js, default_key)
     fig.show()
     fig.write_html(output_file, post_script=post_script)

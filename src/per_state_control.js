@@ -15,7 +15,8 @@
   var mode = "map";             // "map" = national slider active | "state" = per-state panel active
   var _suppressRelayout = false; // guards against spurious plotly_relayout from Plotly.restyle()
 
-  // Used only by exportCurrentState — reads from the DOM title as last resort.
+  // Reads the current election key and shift from the SVG title element.
+  // Used only by exportCurrentState as a fallback when module vars may be stale.
   function getElectionInfo() {
     var el = plotDiv.querySelector(".gtitle");
     var t  = (el && el.getAttribute("data-unformatted")) || "";
@@ -176,6 +177,8 @@
   // ---------------------------------------------------------------------------
   var panel = null, panelSlider = null;
 
+  // Builds the floating per-state swing panel DOM element and wires all button events.
+  // The panel is appended to document.body and toggled visible/hidden by openPanel/closePanel.
   function createPanel() {
     panel = document.createElement("div");
     panel.style.cssText = [
@@ -211,21 +214,26 @@
     ].join("");
 
     panelSlider = panel.querySelector(".psc-slider");
+    // Update the override for the selected state on every slider drag and recompute the map
     panelSlider.addEventListener("input", function () {
       var val = parseInt(this.value, 10);
       setPanelLabel(val);
       if (!selectedState) return;
+      // Remove the override entirely when slider returns to zero (no net change)
       if (val === 0) delete stateOverrides[selectedState];
       else stateOverrides[selectedState] = val;
       computeAndRestyle();
     });
+    // X button closes the panel without resetting the override
     panel.querySelector(".psc-close").addEventListener("click", closePanel);
+    // Reset State removes only the selected state's override and redraws
     panel.querySelector(".psc-reset-state").addEventListener("click", function () {
       if (!selectedState) return;
       delete stateOverrides[selectedState];
       panelSlider.value = 0; setPanelLabel(0);
       computeAndRestyle();
     });
+    // Reset All clears every per-state override, redraws, and closes the panel
     panel.querySelector(".psc-reset-all").addEventListener("click", function () {
       stateOverrides = {};
       panelSlider.value = 0; setPanelLabel(0);
@@ -234,6 +242,7 @@
     document.body.appendChild(panel);
   }
 
+  // Updates the D+/R+/Baseline label text and color below the per-state slider
   function setPanelLabel(val) {
     val = parseInt(val, 10);
     var el = panel.querySelector(".psc-label");
@@ -241,6 +250,7 @@
     el.textContent = val > 0 ? "D+" + val : val < 0 ? "R+" + Math.abs(val) : "Baseline";
   }
 
+  // Shows the panel for the given state abbreviation, restoring any existing override value
   function openPanel(abbr, name, override) {
     selectedState = abbr;
     panel.querySelector(".psc-name").textContent = name;
@@ -248,13 +258,17 @@
     panel.style.display = "block";
   }
 
+  // Hides the panel and clears the selected state without touching stateOverrides
   function closePanel() { panel.style.display = "none"; selectedState = null; }
 
   // ---------------------------------------------------------------------------
   // Export CSV (includes per-state overrides)
   // ---------------------------------------------------------------------------
+  // Thin wrapper that returns the current election key and shift for use in export
   function getCurrentElectionState() { return getElectionInfo(); }
 
+  // Exports the current map state (national shift + any per-state overrides) as a CSV download.
+  // Vote counts are adjusted to reflect both the national shift and per-state overrides.
   function exportCurrentState() {
     var s    = getCurrentElectionState();
     var data = PER_STATE_BASELINE[s.key];
@@ -263,12 +277,15 @@
     data.locations.forEach(function (abbr, i) {
       var dem = data.dem_votes[i], rep = data.rep_votes[i], other = data.other_votes[i];
       var total = dem + rep + other;
+      // If no votes exist for this state, write baseline values unchanged
       if (total <= 0) { rows.push([data.state_names[i],data.evs[i],dem,rep,other].join(",")); return; }
+      // Combine national shift and per-state override to compute final adjusted vote counts
       var half   = (s.shift + (stateOverrides[abbr] || 0)) / 2;
       var demAdj = Math.round(((dem/total)*100 + half) / 100 * total);
       var repAdj = Math.round(((rep/total)*100 - half) / 100 * total);
       rows.push([data.state_names[i], data.evs[i], demAdj, repAdj, other].join(","));
     });
+    // Build a descriptive filename from the year key and shift label
     var label = s.shift===0?"baseline":s.shift>0?"D+"+s.shift:"R+"+Math.abs(s.shift);
     var blob  = new Blob([rows.join("\n")], { type:"text/csv" });
     var url   = URL.createObjectURL(blob);
@@ -280,7 +297,10 @@
   // ---------------------------------------------------------------------------
   // Import CSV (orchestration — utilities from utils.js)
   // ---------------------------------------------------------------------------
+  // Reads a user-selected CSV file, validates it, and registers it as a new year toggle button.
+  // The imported election is computed across all existing slider shifts before being added.
   function importCSV(file) {
+    // Reject files whose names don't contain a valid presidential year
     if (!yearFromFilename(file.name)) {
       alert("\"" + file.name + "\" must contain a presidential year (divisible by 4, 1788–2100).");
       return;
@@ -289,18 +309,22 @@
     reader.onload = function (e) {
       var rows = parseElectionCSV(e.target.result);
       if (!rows) { alert("CSV must have columns: State, EV, Democratic, Republican, Other"); return; }
+      // Use the filename stem (without .csv) as the election key and toggle button label
       var key = file.name.replace(/\.csv$/i, "");
       if (PER_STATE_BASELINE[key] && !confirm("\"" + key + "\" already loaded. Replace?")) return;
 
+      // Read current slider shift labels to build matching frames for the imported election
       var steps   = plotDiv.layout.sliders[0].steps;
       var shifts  = steps.map(function (s) { return parseInt(s.label, 10); });
       var zeroIdx = shifts.indexOf(0);
       var n2a     = buildNameToAbbrMap();
 
+      // Build one frame per slider step, computing TP and tipping-point flag for each
       var allFrames = shifts.map(function (s) {
         var f  = buildImportFrame(rows, s, n2a);
         var tp = tpFromImportFrame(f);
         var tpName = tp ? (f.names[f.locs.indexOf(tp)] || tp) : "N/A";
+        // Stamp the tipping-point star into the customdata for each winning-party state
         f.cd = f.cd.map(function (c, i) { c[4] = f.locs[i]===tp ? "\u2605 Tipping Point" : ""; return c; });
         f.tp = tp;
         f.title = key + " US Election Results \u2014 Margin Shift: " + s + " | " +
@@ -309,11 +333,13 @@
         return f;
       });
 
+      // Register baseline data at shift=0 so the JS per-state control layer can use it
       var z0 = allFrames[zeroIdx];
       PER_STATE_BASELINE[key] = { locations:z0.locs, state_names:z0.names,
         signed_margins:z0.sm, dem_votes:z0.dv, rep_votes:z0.rv,
         other_votes:z0.ov, evs:z0.evs };
 
+      // Build Plotly slider steps for the new election year
       var newSteps = allFrames.map(function (f, i) {
         var tp = f.tp ? [f.tp] : [];
         return { label:String(shifts[i]), method:"update", args:[
@@ -322,12 +348,14 @@
         ]};
       });
 
+      // Build the year toggle button that switches to this imported election at shift=0
       var tp0 = z0.tp ? [z0.tp] : [];
       var newBtn = { label:key, method:"update", args:[
         { locations:[z0.locs,tp0], z:[z0.z,[0]], customdata:[z0.cd,[[]]] },
         { "title.text":z0.title, "sliders[0].steps":newSteps, "sliders[0].active":zeroIdx },
       ]};
 
+      // Append the new button to the last updatemenu (the year toggle group) via relayout
       var mi = plotDiv.layout.updatemenus.length - 1;
       var btns = plotDiv.layout.updatemenus[mi].buttons.slice();
       btns.push(newBtn);
@@ -345,6 +373,7 @@
   var _btnBase = "padding:5px 16px;font-size:12px;font-weight:600;cursor:pointer;" +
                  "border-radius:4px;border:1px solid;transition:none;";
 
+  // Updates mode toggle button colors and hint text to reflect the current mode
   function styleToggle() {
     if (!modeMapBtn) return;  // not yet created
     if (mode === "map") {
@@ -358,7 +387,8 @@
     }
   }
 
-  // Called on year change to reset both mode and slider state cleanly.
+  // Resets to Map Swing mode, clears overrides, and updates the toggle UI.
+  // Called automatically when the user switches election years.
   function resetToMapMode() {
     mode = "map";
     stateOverrides = {};
@@ -367,6 +397,8 @@
     styleToggle();
   }
 
+  // Builds the slider lock overlay and the Swing Mode toggle bar below the plot.
+  // Map Swing locks per-state clicks; State Swing locks the national slider via the overlay.
   function createModeToggle() {
     // Overlay that blocks the Plotly slider when in State Swing mode
     sliderLockOverlay = document.createElement("div");
@@ -435,7 +467,10 @@
   // ---------------------------------------------------------------------------
   // Toolbar buttons (Import CSV + Export CSV, top-right)
   // ---------------------------------------------------------------------------
+  // Injects Import CSV and Export CSV buttons into the top-right of the plot area.
+  // Also hides Plotly's default modebar, which is replaced by these custom controls.
   function addButtons() {
+    // Hide Plotly's default toolbar (zoom, pan, etc.) in favor of custom controls
     var style = document.createElement("style");
     style.textContent = ".modebar-container { display:none !important; }";
     document.head.appendChild(style);
@@ -463,13 +498,13 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Init
+  // Init — wire up all UI components after the DOM is ready
   // ---------------------------------------------------------------------------
   createPanel();
   addButtons();
   createModeToggle();
 
-  // Close panel when clicking outside plotDiv and the panel itself
+  // Close the per-state panel when the user clicks anywhere outside the plot or panel
   document.addEventListener("click", function (e) {
     if (!panel || panel.style.display === "none") return;
     if (!plotDiv.contains(e.target) && !panel.contains(e.target)) {

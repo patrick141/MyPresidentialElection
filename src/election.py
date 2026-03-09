@@ -16,15 +16,17 @@ import plotly.graph_objects as go
 from src.state import State
 from src.constants import us_state_to_abbrev
 
+# Default directory for canonical election CSV files (data/YEAR.csv)
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class Election:
-    # Presidential elections occur every 4 years starting 1788
+    # Presidential elections occur every 4 years starting in 1788
     _VALID_YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 
     @staticmethod
     def _validate_presidential_year(year_int):
+        # Raises ValueError if the year is not a valid U.S. presidential election year
         if year_int % 4 != 0 or not (1788 <= year_int <= 2100):
             raise ValueError(
                 f"{year_int} is not a valid U.S. presidential election year. "
@@ -36,14 +38,14 @@ class Election:
         Args:
             year_or_path: A 4-digit year string ("2024") or a path to any CSV file
                           ("scenarios/2024_D+5.csv"). Year strings load from data/.
-            label:        Optional display label used in visualizations (year toggle
-                          buttons, titles). Defaults to year string or CSV filename stem.
+            label:        Optional display label for visualizations (year toggle buttons,
+                          titles). Defaults to year string or CSV filename stem.
         """
         self.states = []
 
         p = Path(str(year_or_path))
         if p.suffix.lower() == ".csv":
-            # Path-based load: regex-extract the election year from the filename
+            # Path-based load: extract the election year from the filename via regex
             self._data_path = p
             match = self._VALID_YEAR_RE.search(p.stem)
             if not match:
@@ -56,7 +58,7 @@ class Election:
             self.year = str(year_int)
             self.label = label or p.stem          # e.g. "2024_D+5"
         else:
-            # Year-string load: validate directly
+            # Year-string load: cast directly and validate
             try:
                 year_int = int(year_or_path)
             except (ValueError, TypeError):
@@ -69,18 +71,19 @@ class Election:
             self.year = str(year_int)
             self.label = label or self.year       # e.g. "2024"
 
-        # results summary:
-        # self.results["Democratic"] = (total_votes, total_ev)
-        # self.results["Republican"] = (total_votes, total_ev)
-        # self.results["Other"] = total_other_votes
-        # self.results["TossupEV"] = total_tossup_ev (optional)
+        # results dict structure:
+        #   results["Democratic"] = (total_votes, total_ev)
+        #   results["Republican"] = (total_votes, total_ev)
+        #   results["Other"]      = total_other_votes
+        #   results["TossupEV"]   = total_tossup_ev
         self.results = {}
 
-        self.min_ev_needed = 270
+        self.min_ev_needed = 270   # Electoral College majority threshold
         self.total_vote = 0
         self.winner = None
         self.df = None
 
+        # Load CSV and populate self.states on instantiation
         self.read_election_data()
 
     # -------------------------
@@ -88,9 +91,14 @@ class Election:
     # -------------------------
 
     def read_election_data(self):
+        """
+        Reads the election CSV, validates required columns, and builds State objects.
+        Districts (e.g. ME-1, NE-2) are detected by a hyphen in the state name.
+        """
         if not self._data_path.exists():
             raise FileNotFoundError(f"Election data not found: {self._data_path}")
 
+        # Validate that all required columns are present before parsing rows
         required_cols = {"State", "EV", "Democratic", "Republican", "Other"}
         self.df = pd.read_csv(self._data_path)
         missing = required_cols - set(self.df.columns)
@@ -102,15 +110,17 @@ class Election:
             name = row["State"]
             ev = int(row["EV"])
 
+            # Detect congressional districts by the hyphen convention (e.g. "ME-1")
             unit_type = "district" if "-" in name else "statewide"
             parent_state = None
 
             if unit_type == "district":
+                # Extract the two-letter parent state abbreviation from the district name
                 parent_state = name.split("-")[0]   # "ME" or "NE"
 
             s1 = State(name, ev, unit_type=unit_type, parent_state=parent_state)
 
-            # Safely coerce vote values to ints (handles NaN/float)
+            # Coerce vote values to int, safely handling NaN or missing values
             dem = int(row.get("Democratic", 0) or 0)
             gop = int(row.get("Republican", 0) or 0)
             other = int(row.get("Other", 0) or 0)
@@ -118,10 +128,11 @@ class Election:
             s1.set_results({"Democratic": dem, "Republican": gop, "Other": other})
             self.states.append(s1)
 
+        # Compute initial EV totals and popular vote winner from loaded data
         self.determine_winner()
 
     def reset_all_states(self):
-        """Reset all states back to baseline results."""
+        """Resets all states back to their original baseline results and recomputes totals."""
         for state in self.states:
             state.reset_results()
         self.determine_winner()
@@ -131,6 +142,10 @@ class Election:
     # -------------------------
 
     def determine_winner(self):
+        """
+        Aggregates EV and popular vote totals across all states and sets self.results.
+        Note: self.winner reflects the popular vote winner, which may differ from the EC winner.
+        """
         DEM = "Democratic"
         GOP = "Republican"
         OTHER = "Other"
@@ -146,27 +161,26 @@ class Election:
         self.total_vote = 0
 
         for state in self.states:
-
             results = state.get_results()
             winner = state.get_winner()
 
-            # EV allocation
+            # Assign each state's EVs to the winning party or tossup bucket
             if winner == DEM:
                 dem_ev += state.get_ev()
             elif winner == GOP:
                 gop_ev += state.get_ev()
-            elif winner == TOSSUP or winner == TIED:
+            elif winner in (TOSSUP, TIED):
                 tossup_ev += state.get_ev()
             else:
-                # unknown label: treat as tossup
+                # Unrecognized winner label; treat as tossup
                 tossup_ev += state.get_ev()
 
-            # Popular vote totals (from CURRENT results)
+            # Accumulate national popular vote totals from current simulated results
             dem_votes += int(results.get(DEM, 0) or 0)
             gop_votes += int(results.get(GOP, 0) or 0)
             self.total_vote += state.get_total_vote()
 
-        # Winner by popular vote (optional; EC winner could differ)
+        # Determine popular vote winner (may differ from Electoral College winner)
         if dem_votes > gop_votes:
             self.winner = DEM
         elif gop_votes > dem_votes:
@@ -174,15 +188,18 @@ class Election:
         else:
             self.winner = TIED
 
+        # Store aggregated results for both parties and tossup EVs
         self.results[DEM] = (dem_votes, dem_ev)
         self.results[GOP] = (gop_votes, gop_ev)
         self.results[OTHER] = self.total_vote - (dem_votes + gop_votes)
         self.results["TossupEV"] = tossup_ev
 
     def get_total_votes(self):
+        # Returns the total number of votes cast across all states in the current simulation
         return self.total_vote
 
     def print_summary(self):
+        # Prints popular vote winner, party totals, and tossup EVs to stdout
         print(self.winner, " won the election (popular vote)")
         print("Dem:", self.results.get("Democratic"))
         print("GOP:", self.results.get("Republican"))
@@ -195,12 +212,13 @@ class Election:
     def export_scenario(self, output_file="scenario.csv"):
         """
         Exports the current simulated state of all states to CSV or JSON.
-        Format mirrors data/YEAR.csv: State, EV, Democratic, Republican, Other.
-        JSON output is a list of objects, one per state/district row.
-        File format is auto-detected from the extension (.csv or .json).
+        Output schema mirrors data/YEAR.csv; JSON output is a list of row objects.
+        File format is auto-detected from the file extension (.csv or .json).
         """
+        # Create output directory if it doesn't already exist
         Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
+        # Build one row per state/district from current simulated results
         rows = [
             {
                 "State":       st.get_name(),
@@ -212,6 +230,7 @@ class Election:
             for st in self.states
         ]
 
+        # Write JSON or CSV based on the output file extension
         if output_file.endswith(".json"):
             with open(output_file, "w") as f:
                 json.dump(rows, f, indent=2)
@@ -225,33 +244,36 @@ class Election:
     # -------------------------
 
     def sort_alphabetically(self):
+        # Sorts self.states in place by state name alphabetically
         self.states.sort(key=lambda x: x.get_name())
 
     def sort_by_state_margins(self):
         """
-        Sorts by current margin:
-        - winner states by decreasing margin
-        - then loser states by increasing margin
-        Note: Tossup/TIED states may behave oddly; you can customize later.
+        Sorts states by current margin: winner states descending, then loser states ascending.
+        Used internally by get_tipping_point_state to identify the closest winning states.
         """
         win_party = self.winner
         other_party = State.get_other_party(win_party)
 
+        # Separate states by which party won, then sort each group by margin
         winner_list = [s for s in self.states if s.get_winner() == win_party]
         winner_list.sort(key=lambda x: x.get_margin()[1])
 
         other_list = [s for s in self.states if s.get_winner() == other_party]
         other_list.sort(key=lambda x: x.get_margin()[1])
 
+        # Winner states largest margin first, followed by loser states smallest first
         self.states = winner_list[::-1] + other_list
 
     def find_state_by_name(self, state_name):
+        # Returns the State object matching the given name, or None if not found
         for state in self.states:
             if state.get_name() == state_name:
                 return state
         return None
 
     def get_result_of_state_name(self, state_name):
+        # Returns the current results dict for the named state, or None if not found
         s = self.find_state_by_name(state_name)
         if not s:
             print("State " + state_name + " not found")
@@ -264,7 +286,8 @@ class Election:
 
     def apply_vote_boost_all_states(self, party, votes):
         """
-        Adds votes to one party in every state (turnout boost).
+        Adds a flat vote count to one party in every statewide state (turnout boost).
+        Skips congressional districts (ME/NE splits).
         """
         for state in self.states:
             if state.get_parent_state() is not None:
@@ -274,8 +297,7 @@ class Election:
 
     def apply_margin_swing_all_states(self, target_party, swing_points):
         """
-        Swings each state's two-party results toward target_party by swing_points.
-        swing_points is percentage points of two-party total.
+        Swings every state's two-party split toward target_party by swing_points percentage points.
         Includes ME/NE congressional districts.
         """
         for state in self.states:
@@ -283,6 +305,7 @@ class Election:
         self.determine_winner()
 
     def apply_margin_swing_to_state(self, state_name, target_party, swing_points):
+        # Applies a margin swing to a single named state; skips ME/NE district rows
         st = self.find_state_by_name(state_name)
         if not st:
             return
@@ -293,6 +316,7 @@ class Election:
         self.determine_winner()
 
     def apply_vote_boost_to_state(self, state_name, party, votes):
+        # Applies a vote boost to a single named state; skips ME/NE district rows
         st = self.find_state_by_name(state_name)
         if not st:
             return
@@ -303,10 +327,14 @@ class Election:
         self.determine_winner()
 
     # -------------------------
-    # Analytics (kept from your original, updated calls)
+    # Analytics
     # -------------------------
 
     def get_popular_vote_margin(self):
+        """
+        Returns (winning_party, margin_percent) for the popular vote winner.
+        Margin is expressed as a percentage of total votes cast.
+        """
         win_party = self.winner
         loser_party = State.get_other_party(win_party)
         if loser_party is None:
@@ -320,6 +348,10 @@ class Election:
         return (win_party, margin)
 
     def get_relative_to_pv_margin(self, m_state):
+        """
+        Returns (party, margin) representing how a given state's margin compares to the
+        national popular vote margin — used to compute Electoral College bias.
+        """
         win_party, win_margin = self.get_popular_vote_margin()
         m_party, m_margin = m_state.get_margin()
 
@@ -327,8 +359,8 @@ class Election:
         if other_party is None:
             return (win_party, abs(win_margin))
 
-        # if the state is tossup/tied, treat margin as 0
-        if m_party == "Tossup" or m_party == "TIED":
+        # Treat tossup/tied states as a zero-margin win for the popular vote winner
+        if m_party in ("Tossup", "TIED"):
             m_party = win_party
             m_margin = 0.0
 
@@ -336,17 +368,22 @@ class Election:
         rel_margin = 0.0
 
         if win_party == m_party:
+            # State leans same direction as national; EC bias is the difference
             rel_margin = win_margin - m_margin
             rel_party = win_party if rel_margin < 0.0 else other_party
         else:
+            # State leans opposite direction; add margins to compute total EC bias
             rel_margin = win_margin + m_margin
             rel_party = other_party
 
         return (rel_party, abs(rel_margin))
 
     def get_tipping_point_state(self):
-        # Use Electoral College EVs to determine the winner, not popular vote.
-        # self.winner is popular-vote based and can differ from the EC winner.
+        """
+        Returns the tipping point state — the EC winner's state that, when removed,
+        would drop them below 270 EVs. States are sorted safest-to-closest.
+        """
+        # Determine EC winner from EV totals (may differ from popular vote winner)
         dem_ev = self.results.get("Democratic", (0, 0))[1]
         gop_ev = self.results.get("Republican", (0, 0))[1]
         if dem_ev >= self.min_ev_needed:
@@ -354,10 +391,9 @@ class Election:
         elif gop_ev >= self.min_ev_needed:
             ec_winner = "Republican"
         else:
-            return None  # 269-269 tie or no majority — no tipping point
+            return None  # 269-269 tie or no majority — no tipping point exists
 
-        # Sort EC winner's states safest-first (desc margin), accumulate EVs.
-        # The state that reaches min_ev_needed is the tipping point.
+        # Walk winner's states from safest to closest, accumulate EVs until 270 is reached
         winner_states = sorted(
             [s for s in self.states if s.get_winner() == ec_winner],
             key=lambda s: s.get_margin()[1],
@@ -371,30 +407,38 @@ class Election:
         return None
 
     def get_ec_bias(self):
+        # Returns (party, margin) showing how much the EC favors one party over the popular vote
         tp = self.get_tipping_point_state()
         if not tp:
             return ("TIED", 0.0)
         return self.get_relative_to_pv_margin(tp)
 
     def get_states_as_list(self):
+        # Returns the full list of State objects (statewide + districts)
         return self.states
 
     def get_states_won_by_party(self, party):
+        # Returns a filtered list of states won by the given party
         return [state for state in self.states if state.get_winner() == party]
 
     # -------------------------
-    # Visualization (same as before, updated for snake_case + tossup)
+    # Visualization helpers
     # -------------------------
 
     def is_split_ev_unit(self, state):
         """
-        Returns True for Maine/Nebraska and their district rows.
-        We block applying swings/boosts to these in Phase 1.
+        Returns True for Maine, Nebraska, and their congressional district rows.
+        These are blocked from individual swings/boosts in Phase 1.
         """
         name = state.get_name()
         return name in ("Maine", "Nebraska") or name.startswith("ME-") or name.startswith("NE-")
 
     def visualize(self, output_file="election_results_map.html"):
+        """
+        Generates a static choropleth map of the current election state and writes it to HTML.
+        Uses Plotly Express for straightforward party-color rendering.
+        """
+        # Build a summary row per state for the choropleth data source
         state_summary = []
         for state in self.states:
             winner = state.get_winner()
@@ -409,6 +453,7 @@ class Election:
             )
 
         df = pd.DataFrame(state_summary)
+        # Map state names to two-letter abbreviations required by Plotly's USA-states mode
         df["State Abbr"] = df["State"].map(us_state_to_abbrev)
 
         color_map = {
@@ -455,13 +500,13 @@ class Election:
         step=1
     ):
         """
-        Creates an interactive map with a national margin shift slider.
+        Creates an interactive map with a national margin shift slider (single year).
         Positive shift swings toward Democrats, negative toward Republicans.
         Writes a standalone HTML file.
         """
 
-        # --- helpers ---
         def build_frame_df(election_obj):
+            # Builds a DataFrame of statewide results, filtering out unmapped state names
             rows = []
             for st in election_obj.states:
                 winner = st.get_winner()
@@ -477,28 +522,28 @@ class Election:
                 })
 
             df = pd.DataFrame(rows)
-            # drop anything that doesn't map (safety)
+            # Drop rows without a valid state abbreviation (e.g. district rows)
             df = df[df["State Abbr"].notna()]
             return df
 
         def winner_to_code(w):
+            # Converts winner string to a numeric z-value for choropleth coloring (-1/0/1)
             if w == "Democratic":
                 return -1
             if w == "Republican":
                 return 1
-            return 0  # Tossup/TIED
+            return 0  # Tossup / TIED
 
         shifts = list(range(min_shift, max_shift + 1, step))
 
-        # Build frames
         frames = []
         base_title = f"{self.year} US Election Results — Margin Shift: "
 
         for s in shifts:
-            # Reset back to baseline for a clean frame
+            # Reset to baseline before applying each shift to ensure clean frames
             self.reset_all_states()
 
-            # Apply swing: positive = Democratic, negative = Republican
+            # Apply the appropriate directional swing for this slider step
             if s > 0:
                 self.apply_margin_swing_all_states("Democratic", abs(s))
             elif s < 0:
@@ -516,6 +561,7 @@ class Election:
             pv_party, pv_margin = self.get_popular_vote_margin()
             pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
 
+            # Build one Plotly frame per shift step with updated map data and title
             frames.append(
                 go.Frame(
                     name=str(s),
@@ -545,7 +591,7 @@ class Election:
                 )
             )
 
-        # Start at 0 shift
+        # Default the figure to the zero-shift (baseline) frame
         start_shift = 0 if 0 in shifts else shifts[len(shifts) // 2]
         start_frame = next(f for f in frames if f.name == str(start_shift))
 
@@ -605,7 +651,5 @@ class Election:
         fig.show()
         fig.write_html(output_file)
 
-        # IMPORTANT: return to baseline after generating frames
+        # Always restore baseline after generating all slider frames
         self.reset_all_states()
-
-

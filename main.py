@@ -1,18 +1,17 @@
 """
-Main file
+Main entry point — instantiates Election objects and launches the interactive map.
 """
 
 from src.election import Election
 from src.visualize import visualize_multi_year_slider
 
+# Party name aliases used throughout simulation calls
 DEM = "Democratic"
 GOP = "Republican"
 OTHER = "Other"
 
+# Load 2020 and 2024 election data from data/YEAR.csv
 e2020 = Election("2020")
-#e2020.apply_margin_swing_to_state("Minnesota", GOP, 10)
-#e2020.determine_winner()
-
 e2024 = Election("2024")
 
 # --- Scenario Export (uncomment any block below to generate CSV/JSON files) ---
@@ -31,5 +30,5 @@ e2024 = Election("2024")
 # e2024.export_scenario("scenarios/2024_R+5.json")
 # e2024.reset_all_states()
 
-# Multi-year interactive map with year toggle (2020 / 2024)
+# Build and open the multi-year interactive map with year toggle (2020 / 2024)
 visualize_multi_year_slider([e2020, e2024])
