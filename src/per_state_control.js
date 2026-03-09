@@ -11,7 +11,9 @@
   var currentKey    = PER_STATE_DEFAULT_KEY;
   var currentShift  = 0;
   var selectedState = null;
-  var stateOverrides = {};   // { abbr: signedDelta }  +D / -R
+  var stateOverrides = {};      // { abbr: signedDelta }  +D / -R
+  var mode = "map";             // "map" = national slider active | "state" = per-state panel active
+  var _suppressRelayout = false; // guards against spurious plotly_relayout from Plotly.restyle()
 
   // Used only by exportCurrentState — reads from the DOM title as last resort.
   function getElectionInfo() {
@@ -85,12 +87,15 @@
               loc === tpAbbr ? "\u2605 Tipping Point" : ""];
     });
 
-    // Trace update via restyle — does NOT fire plotly_relayout, no loop risk
+    // Suppress any plotly_relayout that Plotly.restyle() may fire (e.g. with
+    // the figure's initial title), which would incorrectly reset currentKey.
+    _suppressRelayout = true;
     Plotly.restyle(plotDiv, {
       locations:  [data.locations, tpArr],
       z:          [z,              tpArr.length ? [0] : []],
       customdata: [customdata,     [[]]],
     }, [0, 1]);
+    _suppressRelayout = false;
 
     // Fold in district EVs for the title (map colors already correct above)
     demEV += demDistEV; repEV += repDistEV; tossupEV += tossupDistEV;
@@ -112,6 +117,11 @@
   // never from plotDiv.layout which may lag or store stale values.
   // ---------------------------------------------------------------------------
   plotDiv.on("plotly_relayout", function (update) {
+    // Ignore relayout events fired by our own Plotly.restyle() calls
+    // (Plotly can emit these with the figure's initial title, which would
+    //  incorrectly reset currentKey to the default year).
+    if (_suppressRelayout) { _suppressRelayout = false; return; }
+
     var title = update["title.text"] || "";
     if (!title) return;
     var km = title.match(/^(.+?) US Election Results/);
@@ -121,9 +131,10 @@
     var newShift = sm ? parseInt(sm[1], 10) : currentShift;
 
     if (newKey !== currentKey) {
-      stateOverrides = {};
-      closePanel();
       currentKey = newKey;
+      currentShift = newShift;
+      resetToMapMode();  // year change → clear overrides, reset mode, update toggle
+      return;
     }
     currentShift = newShift;
 
@@ -134,18 +145,17 @@
   // setTimeout to ensure computeAndRestyle runs AFTER the slider's own
   // restyle completes. This keeps per-state overrides intact on slider moves.
   plotDiv.on("plotly_sliderstep", function (data) {
+    if (mode === "state") return;  // slider locked in State Swing mode
     var label = data.step && data.step.label;
     var s = parseInt(label, 10);
     if (!isNaN(s)) currentShift = s;
-    if (Object.keys(stateOverrides).length > 0) {
-      setTimeout(computeAndRestyle, 0);
-    }
   });
 
   // ---------------------------------------------------------------------------
   // plotly_click — open per-state panel when user clicks a state
   // ---------------------------------------------------------------------------
   plotDiv.on("plotly_click", function (evt) {
+    if (mode !== "state") return;       // per-state panel only in State Swing mode
     if (!evt || !evt.points || !evt.points.length) return;
     var pt = evt.points[0];
     if (pt.curveNumber !== 0) return;   // ignore TP overlay trace
@@ -328,6 +338,101 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Mode toggle — Map Swing vs State Swing (inserted below the plot)
+  // ---------------------------------------------------------------------------
+  var sliderLockOverlay = null;
+  var modeMapBtn = null, modeStateBtn = null, modeHint = null;
+  var _btnBase = "padding:5px 16px;font-size:12px;font-weight:600;cursor:pointer;" +
+                 "border-radius:4px;border:1px solid;transition:none;";
+
+  function styleToggle() {
+    if (!modeMapBtn) return;  // not yet created
+    if (mode === "map") {
+      modeMapBtn.style.cssText   = _btnBase + "background:#1565c0;color:#fff;border-color:#0d47a1;";
+      modeStateBtn.style.cssText = _btnBase + "background:#f5f5f5;color:#444;border-color:#bbb;";
+      modeHint.textContent       = "Margin slider shifts all states — click states disabled";
+    } else {
+      modeMapBtn.style.cssText   = _btnBase + "background:#f5f5f5;color:#444;border-color:#bbb;";
+      modeStateBtn.style.cssText = _btnBase + "background:#2e7d32;color:#fff;border-color:#1b5e20;";
+      modeHint.textContent       = "Click a state to set its individual swing — map slider locked";
+    }
+  }
+
+  // Called on year change to reset both mode and slider state cleanly.
+  function resetToMapMode() {
+    mode = "map";
+    stateOverrides = {};
+    closePanel();
+    if (sliderLockOverlay) sliderLockOverlay.style.display = "none";
+    styleToggle();
+  }
+
+  function createModeToggle() {
+    // Overlay that blocks the Plotly slider when in State Swing mode
+    sliderLockOverlay = document.createElement("div");
+    sliderLockOverlay.style.cssText = [
+      "position:absolute;left:0;right:0;bottom:0;height:72px;",
+      "z-index:900;cursor:not-allowed;display:none;",
+      "background:rgba(220,220,220,0.70);",
+      "align-items:center;justify-content:center;",
+      "font-family:sans-serif;font-size:12px;color:#555;",
+      "border-top:2px dashed #aaa;pointer-events:all;",
+    ].join("");
+    sliderLockOverlay.innerHTML =
+      "<span style='background:rgba(255,255,255,0.85);padding:4px 12px;" +
+      "border-radius:4px;border:1px solid #bbb;'>" +
+      "&#128274;&nbsp;Map slider locked &mdash; switch to <b>Map Swing</b> to use</span>";
+    plotDiv.appendChild(sliderLockOverlay);
+
+    // Toggle bar inserted immediately after plotDiv
+    var wrap = document.createElement("div");
+    wrap.style.cssText = [
+      "display:flex;align-items:center;gap:10px;",
+      "padding:7px 14px;font-family:sans-serif;font-size:12px;",
+      "background:#f8f8f8;border-top:1px solid #ddd;",
+    ].join("");
+
+    var lbl = document.createElement("span");
+    lbl.textContent = "Swing Mode:";
+    lbl.style.cssText = "color:#555;font-weight:700;white-space:nowrap;";
+
+    modeMapBtn = document.createElement("button");
+    modeMapBtn.textContent = "Map Swing";
+    modeMapBtn.title = "Use the margin slider to shift all states together";
+
+    modeStateBtn = document.createElement("button");
+    modeStateBtn.textContent = "State Swing";
+    modeStateBtn.title = "Click any state on the map to set its individual swing";
+
+    modeHint = document.createElement("span");
+    modeHint.style.cssText = "color:#888;font-size:11px;";
+
+    modeMapBtn.onclick = function () {
+      if (mode === "map") return;
+      mode = "map";
+      stateOverrides = {};
+      closePanel();
+      sliderLockOverlay.style.display = "none";
+      computeAndRestyle();
+      styleToggle();
+    };
+
+    modeStateBtn.onclick = function () {
+      if (mode === "state") return;
+      mode = "state";
+      sliderLockOverlay.style.display = "flex";
+      styleToggle();
+    };
+
+    styleToggle();
+    wrap.appendChild(lbl);
+    wrap.appendChild(modeMapBtn);
+    wrap.appendChild(modeStateBtn);
+    wrap.appendChild(modeHint);
+    if (plotDiv.parentNode) plotDiv.parentNode.insertBefore(wrap, plotDiv.nextSibling);
+  }
+
+  // ---------------------------------------------------------------------------
   // Toolbar buttons (Import CSV + Export CSV, top-right)
   // ---------------------------------------------------------------------------
   function addButtons() {
@@ -362,6 +467,7 @@
   // ---------------------------------------------------------------------------
   createPanel();
   addButtons();
+  createModeToggle();
 
   // Close panel when clicking outside plotDiv and the panel itself
   document.addEventListener("click", function (e) {
