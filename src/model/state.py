@@ -122,6 +122,13 @@ class State:
         # Returns the raw vote count for the given party from current results
         return int(self._results.get(party, 0) or 0)
 
+    def get_vote_lead(self):
+        """
+        Returns the winner's raw vote lead over the opposing major party.
+        Positive = Dem lead, Negative = GOP lead, 0 = tied or no votes.
+        """
+        return self.get_vote_by_party(DEM) - self.get_vote_by_party(GOP)
+
     def get_vote_per_by_party(self, party):
         # Returns the given party's share of the total vote as a percentage (0–100)
         total = self.get_total_vote()

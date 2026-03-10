@@ -21,6 +21,67 @@ load_dotenv()
 _JS_PATH       = Path(__file__).parent.parent / "static" / "js" / "per_state_control.js"
 _JS_UTILS_PATH = Path(__file__).parent.parent / "static" / "js" / "utils.js"
 
+# States to overlay with EV count labels: (state_name_in_csv, lat, lon)
+# All 48 continental states. DC, AK, HI omitted — Plotly insets don't align
+# with scattergeo lat/lon coordinates.
+_EV_LABEL_STATES = [
+    # West Coast
+    ("Washington",     47.4, -120.5),
+    ("Oregon",         43.8, -120.5),
+    ("California",     37.2, -119.4),
+    # Mountain West
+    ("Nevada",         39.3, -116.6),
+    ("Idaho",          44.5, -114.5),
+    ("Montana",        46.9, -110.4),
+    ("Wyoming",        43.0, -107.6),
+    ("Utah",           39.4, -111.5),
+    ("Colorado",       39.1, -105.6),
+    ("Arizona",        34.3, -111.8),
+    ("New Mexico",     34.4, -106.1),
+    # Plains
+    ("North Dakota",   47.5, -100.5),
+    ("South Dakota",   44.4, -100.3),
+    ("Nebraska",       41.5, -100.0),
+    ("Kansas",         38.5,  -98.4),
+    ("Oklahoma",       35.6,  -97.5),
+    ("Texas",          31.5,  -99.3),
+    # Midwest (west of Mississippi)
+    ("Minnesota",      46.4,  -94.5),
+    ("Iowa",           42.1,  -93.5),
+    ("Missouri",       38.5,  -92.6),
+    ("Arkansas",       34.8,  -92.5),
+    ("Louisiana",      31.0,  -91.8),
+    # Midwest (east of Mississippi)
+    ("Wisconsin",      44.5,  -90.0),
+    ("Michigan",       44.3,  -85.4),
+    ("Illinois",       40.0,  -89.2),
+    ("Indiana",        40.3,  -86.1),
+    ("Ohio",           40.4,  -82.8),
+    # South
+    ("Mississippi",    32.7,  -89.7),
+    ("Alabama",        32.8,  -86.8),
+    ("Tennessee",      35.8,  -86.3),
+    ("Kentucky",       37.5,  -85.3),
+    ("Georgia",        32.7,  -83.4),
+    ("Florida",        27.8,  -81.7),
+    ("South Carolina", 33.8,  -80.9),
+    ("North Carolina", 35.6,  -79.4),
+    ("Virginia",       37.8,  -79.5),
+    ("West Virginia",  38.6,  -80.6),
+    # Northeast
+    ("Pennsylvania",   41.2,  -77.2),
+    ("New York",       42.9,  -75.6),
+    ("Maine",          45.4,  -69.0),
+    ("Vermont",        44.0,  -72.7),
+    ("New Hampshire",  43.7,  -71.6),
+    ("Massachusetts",  42.3,  -71.8),
+    ("Rhode Island",   41.7,  -71.5),
+    ("Connecticut",    41.6,  -72.7),
+    ("New Jersey",     40.1,  -74.5),
+    ("Delaware",       39.0,  -75.5),
+    ("Maryland",       39.0,  -76.8),
+]
+
 # Order and y-positions for the five congressional district annotation boxes
 _DISTRICT_ORDER = ["ME-1", "ME-2", "NE-1", "NE-2", "NE-3"]
 _PANEL_X = 0.89
@@ -60,7 +121,7 @@ def _build_state_df(election_obj):
             "Winner":     winner,
             "EV":         st.get_ev(),
             "Margin":     round(margin, 2),
-            "Votes":      st.get_vote_by_party(winner) if winner not in ("Tossup", "TIED") else 0,
+            "Lead":       abs(st.get_vote_lead()) if winner not in ("Tossup", "TIED") else 0,
             "Dem_Votes":   st.get_vote_by_party("Democratic"),
             "Rep_Votes":   st.get_vote_by_party("Republican"),
             "Other_Votes": st.get_vote_by_party("Other"),
@@ -184,6 +245,34 @@ def _reapply_state_overrides(election_obj, overrides):
         election_obj.determine_winner()
 
 
+def _build_ev_label_trace_data(election_obj):
+    """
+    Returns (lats, lons, texts) for the EV label scattergeo trace.
+    Only includes states defined in _EV_LABEL_STATES that exist in the election.
+    """
+    lats, lons, texts = [], [], []
+    for name, lat, lon in _EV_LABEL_STATES:
+        st = election_obj.find_state_by_name(name)
+        if st:
+            lats.append(lat)
+            lons.append(lon)
+            texts.append(str(st.get_ev()))
+    return lats, lons, texts
+
+
+def _get_ec_bias_label(election_obj):
+    """
+    Returns a formatted EC bias string e.g. 'GOP +1.82%'.
+    Saves and restores states order because get_ec_bias sorts in place.
+    """
+    saved_order = list(election_obj.states)
+    bias_party, bias_margin = election_obj.get_ec_bias()
+    election_obj.states = saved_order
+    if bias_party == "TIED":
+        return "Even"
+    return f"{bias_party[:3]} +{bias_margin:.2f}%"
+
+
 def _get_tp_info(election_obj):
     """
     Returns (tp_abbr, tp_name) for the current tipping point state.
@@ -264,20 +353,28 @@ def visualize_multi_year_slider(
                 lambda a: "★ Tipping Point" if a == tp_abbr else ""
             )
 
-            dem_ev = election.results["Democratic"][1]
-            gop_ev = election.results["Republican"][1]
+            dem_ev    = election.results["Democratic"][1]
+            gop_ev    = election.results["Republican"][1]
             tossup_ev = election.results.get("TossupEV", 0)
+            dem_votes = election.results["Democratic"][0]
+            gop_votes = election.results["Republican"][0]
+            total_votes = election.total_vote or 1
+            dem_pct = dem_votes / total_votes * 100
+            gop_pct = gop_votes / total_votes * 100
             pv_party, pv_margin = election.get_popular_vote_margin()
-            pv_label = f"{pv_party[:3]} +{pv_margin:.1f}%"
+            pv_label   = f"{pv_party[:3]} +{pv_margin:.2f}%"
+            bias_label = _get_ec_bias_label(election)
             title = (
-                f"{key} US Election Results — Margin Shift: {s} | "
-                f"Dem {dem_ev} - GOP {gop_ev} - Tossup {tossup_ev} | PV: {pv_label} | TP: {tp_name}"
+                f"{key} US Election Results — Shift: {s} | "
+                f"Dem {dem_ev} EV · {dem_votes/1e6:.2f}M ({dem_pct:.2f}%)  vs  "
+                f"GOP {gop_ev} EV · {gop_votes/1e6:.2f}M ({gop_pct:.2f}%)"
+                f"  |  PV: {pv_label}  |  TP: {tp_name}  |  Bias: {bias_label}"
             )
 
             year_data[key].append({
                 "locations":  df["State Abbr"].tolist(),
                 "z":          z,
-                "customdata": df[["Winner", "EV", "Margin", "Votes", "TP_Flag"]].values.tolist(),
+                "customdata": df[["Winner", "EV", "Margin", "Lead", "TP_Flag"]].values.tolist(),
                 "title":      title,
                 "districts":  _collect_districts(election),
                 "tp_abbr":    tp_abbr,
@@ -323,10 +420,13 @@ def visualize_multi_year_slider(
 
     def make_slider_steps(key):
         """Builds the list of Plotly slider step dicts for a given election year."""
+        ev = ev_label_data[key]
         steps = []
         for i, s in enumerate(shifts):
             d = year_data[key][i]
-            # Each step updates the map trace (restyle) and the title + annotations (relayout)
+            # Each step updates the map trace (restyle) and the title + annotations (relayout).
+            # EV label trace (index 2) is re-asserted on every step so it persists through
+            # slider moves — Plotly drops unreferenced traces during partial re-renders.
             relayout = {"title.text": d["title"]}
             relayout.update(_district_relayout(d["districts"]))
             tp = [d["tp_abbr"]] if d["tp_abbr"] else []
@@ -335,20 +435,30 @@ def visualize_multi_year_slider(
                 "method": "update",
                 "args": [
                     {
-                        "locations":  [d["locations"], tp],
-                        "z":          [d["z"],          [0] if tp else []],
-                        "customdata": [d["customdata"], [[]]],
+                        "locations":  [d["locations"], tp,    None],
+                        "z":          [d["z"],  [0] if tp else [], None],
+                        "customdata": [d["customdata"], [[]],  None],
+                        "lat":        [None,    None,           ev["lat"]],
+                        "lon":        [None,    None,           ev["lon"]],
+                        "text":       [None,    None,           ev["text"]],
                     },
                     relayout,
                 ],
             })
         return steps
 
+    # Precompute EV label trace data per year (EV values are fixed per year, not per shift)
+    ev_label_data = {}
+    for election in elections:
+        lats, lons, texts = _build_ev_label_trace_data(election)
+        ev_label_data[election.label] = {"lat": lats, "lon": lons, "text": texts}
+
     # Each year button swaps the map to that year's baseline and rewires slider steps
     year_buttons = []
     for election in elections:
         key = election.label
         d = year_data[key][zero_idx]
+        ev = ev_label_data[key]
         relayout = {
             "title.text":        d["title"],
             "sliders[0].steps":  make_slider_steps(key),
@@ -361,9 +471,12 @@ def visualize_multi_year_slider(
             "method": "update",
             "args": [
                 {
-                    "locations":  [d["locations"], tp],
-                    "z":          [d["z"],          [0] if tp else []],
-                    "customdata": [d["customdata"], [[]]],
+                    "locations":  [d["locations"], tp,       None],
+                    "z":          [d["z"],          [0] if tp else [], None],
+                    "customdata": [d["customdata"], [[]],    None],
+                    "lat":        [None,            None,    ev["lat"]],
+                    "lon":        [None,            None,    ev["lon"]],
+                    "text":       [None,            None,    ev["text"]],
                 },
                 relayout,
             ],
@@ -390,7 +503,7 @@ def visualize_multi_year_slider(
                         hovertemplate=(
                             "<b>%{location}</b><br>Winner: %{customdata[0]}<br>"
                             "EV: %{customdata[1]}<br>Margin: %{customdata[2]}%<br>"
-                            "Votes: %{customdata[3]:,}<extra></extra>"
+                            "Lead: %{customdata[3]:,}<extra></extra>"
                         ),
                     )],
                     layout=go.Layout(title_text=d["title"]),
@@ -432,7 +545,7 @@ def visualize_multi_year_slider(
                 hovertemplate=(
                     "<b>%{location}</b><br>Winner: %{customdata[0]}<br>"
                     "EV: %{customdata[1]}<br>Margin: %{customdata[2]}%<br>"
-                    "Votes: %{customdata[3]:,}<br>%{customdata[4]}<extra></extra>"
+                    "Lead: %{customdata[3]:,}<br>%{customdata[4]}<extra></extra>"
                 ),
             ),
             # Semi-transparent gold overlay that marks the tipping point state
@@ -444,6 +557,16 @@ def visualize_multi_year_slider(
                 colorscale=[[0, "rgba(255,215,0,0.45)"], [1, "rgba(255,215,0,0.45)"]],
                 showscale=False,
                 hoverinfo="skip",
+            ),
+            # EV count labels rendered as white text over large states
+            go.Scattergeo(
+                lat=ev_label_data[default_key]["lat"],
+                lon=ev_label_data[default_key]["lon"],
+                text=ev_label_data[default_key]["text"],
+                mode="text",
+                textfont=dict(size=18, color="white", family="Arial Black"),
+                hoverinfo="skip",
+                showlegend=False,
             ),
         ],
         layout=go.Layout(

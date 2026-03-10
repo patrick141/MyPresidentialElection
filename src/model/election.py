@@ -171,10 +171,13 @@ class Election:
                 # Unrecognized winner label; treat as tossup
                 tossup_ev += state.get_ev()
 
-            # Accumulate national popular vote totals from current simulated results
-            dem_votes += int(results.get(DEM, 0) or 0)
-            gop_votes += int(results.get(GOP, 0) or 0)
-            self.total_vote += state.get_total_vote()
+            # Accumulate national popular vote totals from statewide rows only.
+            # District rows (ME-1, NE-2, etc.) are subsets of their parent statewide
+            # row — counting both would double-count Maine and Nebraska votes.
+            if state.get_parent_state() is None:
+                dem_votes += int(results.get(DEM, 0) or 0)
+                gop_votes += int(results.get(GOP, 0) or 0)
+                self.total_vote += state.get_total_vote()
 
         # Determine popular vote winner (may differ from Electoral College winner)
         if dem_votes > gop_votes:
