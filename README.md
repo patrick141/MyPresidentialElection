@@ -23,15 +23,21 @@ Planned: PostgreSQL · Backend API layer
 # 📁 Project Structure
 
 ```
-├── data/               # Election CSVs (2020, 2024)
-├── scenarios/          # Exported scenario files
+├── data/                        # Election CSVs (2020, 2024)
+├── scenarios/                   # Exported scenario files
 ├── src/
-│   ├── election.py     # Election engine
-│   ├── state.py        # State model
-│   ├── visualize.py    # Plotly visualization layer
-│   ├── per_state_control.js  # In-browser interaction logic
-│   ├── utils.js        # JS utility functions
-│   └── constants.py    # State abbreviation mappings
+│   ├── model/
+│   │   ├── election.py          # Election engine
+│   │   ├── state.py             # State model
+│   │   └── constants.py         # State abbreviation mappings
+│   ├── visualization/
+│   │   └── visualize.py         # Plotly visualization layer
+│   └── static/js/
+│       ├── per_state_control.js # In-browser interaction logic
+│       └── utils.js             # JS utility functions
+├── tests/
+│   ├── test_election.py         # Election class unit tests
+│   └── test_state.py            # State class unit tests
 ├── main.py
 └── election_results_map_with_margin.html
 ```
@@ -79,17 +85,40 @@ Click any state on the map to open a floating swing panel with an independent ±
 * **Map Swing** — national slider shifts all states together
 * **State Swing** — national slider locked; click any state to adjust it individually
 
-> **Note:** Combining a national swing with per-state overrides simultaneously was not achievable within Plotly's pre-computed frame rendering model. The two modes are intentionally kept separate. Unified control is planned for Phase 3.
+> **Note:** Combining a national swing with per-state overrides simultaneously was not achievable within Plotly's pre-computed frame rendering model. The two modes are intentionally kept separate. Unified control is deferred to Phase 4 where it will be built natively as part of a React frontend.
 
 ---
 
-# 🗄 Phase 3 (Planned)
+# 🔧 Phase 3 (In Progress)
 
-* **Unified Swing Control** *(carried from Phase 2)* — replace Plotly's pre-computed slider with a custom JS-driven range input, enabling national and per-state swings to work simultaneously
-* **Automated Data Pipeline** — automate CSV generation from external datasets; extend coverage to 2008, 2012, and earlier cycles
-* **Database Integration** — PostgreSQL storage for election cycles, state results, and saved scenarios
-* **Backend API** — modularize simulation logic and expose endpoints for external data ingestion and result retrieval
-* **Advanced Modeling** — polling data ingestion, scenario comparison, historical analysis
+Completes the simulation engine with historical data coverage, analytical depth, and test coverage.
+
+## 🔲 Historical Data Pipeline
+
+Normalize and integrate 2012 and 2016 election results into the existing multi-year framework. Extends the year toggle from 2 to 4 cycles and includes a reusable ingestion script for adding future election years.
+
+## 🔲 Electoral College Bias Display
+
+Surface the existing `get_ec_bias()` calculation into the interactive map. Shows how much the Electoral College structurally favors one party over the popular vote, and identifies the tipping point state responsible for that bias.
+
+## 🔲 Scenario Comparison
+
+Add the ability to compare two election scenarios side by side — for example, 2020 vs 2024, or a baseline year against a simulated swing. Extends the simulation engine with a dedicated comparison layer.
+
+## 🔲 Unit Test Coverage
+
+Expand the test suite from placeholder tests to meaningful coverage of the simulation engine — margin swing, tipping point calculation, EC bias, reset behavior, and edge cases.
+
+---
+
+# 🚀 Phase 4 (Stretch Goals)
+
+Future work beyond Phase 3 completion. No timeline set.
+
+* **Unified Swing Control** *(deferred from Phase 2)* — replace Plotly's slider with a custom range input so national and per-state swings work simultaneously; planned as a React component
+* **React Frontend** — rebuild the interactive map as a hosted web application with a Flask backend API
+* **Database Integration** — PostgreSQL storage for election cycles, saved scenarios, and historical results
+* **Backend API** — Flask endpoints wrapping the simulation engine for external data ingestion and scenario retrieval
 
 ---
 
@@ -108,7 +137,8 @@ Click any state on the map to open a floating swing panel with an independent ±
 # 📌 Current Status
 
 * ✅ Phase 1: Complete
-* ✅ Phase 2: Complete — per-state individual control delivered with mode toggle; unified national + per-state swing moved to Phase 3
-* 🗄 Phase 3: Unified swing control, database integration, and backend modularization (planned)
+* ✅ Phase 2: Complete — per-state individual control delivered with mode toggle; unified swing deferred to Phase 4
+* 🔧 Phase 3: In Progress — historical data pipeline, EC bias display, scenario comparison, unit test coverage
+* 🚀 Phase 4: Stretch goals — React frontend, Flask API, database integration, unified swing control
 
 ---
