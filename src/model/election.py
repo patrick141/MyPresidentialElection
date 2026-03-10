@@ -14,7 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from src.model.state import State
-from src.model.constants import us_state_to_abbrev
+from src.model.constants import us_state_to_abbrev, DEM, GOP, OTHER, TIED
 
 # Default directory for canonical election CSV files (data/YEAR.csv)
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
@@ -99,7 +99,7 @@ class Election:
             raise FileNotFoundError(f"Election data not found: {self._data_path}")
 
         # Validate that all required columns are present before parsing rows
-        required_cols = {"State", "EV", "Democratic", "Republican", "Other"}
+        required_cols = {"State", "EV", DEM, GOP, OTHER}
         self.df = pd.read_csv(self._data_path)
         missing = required_cols - set(self.df.columns)
         if missing:
@@ -121,11 +121,11 @@ class Election:
             s1 = State(name, ev, unit_type=unit_type, parent_state=parent_state)
 
             # Coerce vote values to int, safely handling NaN or missing values
-            dem = int(row.get("Democratic", 0) or 0)
-            gop = int(row.get("Republican", 0) or 0)
-            other = int(row.get("Other", 0) or 0)
+            dem = int(row.get(DEM, 0) or 0)
+            gop = int(row.get(GOP, 0) or 0)
+            other = int(row.get(OTHER, 0) or 0)
 
-            s1.set_results({"Democratic": dem, "Republican": gop, "Other": other})
+            s1.set_results({DEM: dem, GOP: gop, OTHER: other})
             self.states.append(s1)
 
         # Compute initial EV totals and popular vote winner from loaded data
@@ -146,11 +146,7 @@ class Election:
         Aggregates EV and popular vote totals across all states and sets self.results.
         Note: self.winner reflects the popular vote winner, which may differ from the EC winner.
         """
-        DEM = "Democratic"
-        GOP = "Republican"
-        OTHER = "Other"
         TOSSUP = "Tossup"
-        TIED = "TIED"
 
         dem_votes = 0
         gop_votes = 0
@@ -201,8 +197,8 @@ class Election:
     def print_summary(self):
         # Prints popular vote winner, party totals, and tossup EVs to stdout
         print(self.winner, " won the election (popular vote)")
-        print("Dem:", self.results.get("Democratic"))
-        print("GOP:", self.results.get("Republican"))
+        print("Dem:", self.results.get(DEM))
+        print("GOP:", self.results.get(GOP))
         print("TossupEV:", self.results.get("TossupEV"))
 
     # -------------------------
@@ -223,9 +219,9 @@ class Election:
             {
                 "State":       st.get_name(),
                 "EV":          st.get_ev(),
-                "Democratic":  int(st.get_results().get("Democratic", 0)),
-                "Republican":  int(st.get_results().get("Republican", 0)),
-                "Other":       int(st.get_results().get("Other", 0)),
+                DEM:   int(st.get_results().get(DEM, 0)),
+                GOP:   int(st.get_results().get(GOP, 0)),
+                OTHER: int(st.get_results().get(OTHER, 0)),
             }
             for st in self.states
         ]
@@ -384,12 +380,12 @@ class Election:
         would drop them below 270 EVs. States are sorted safest-to-closest.
         """
         # Determine EC winner from EV totals (may differ from popular vote winner)
-        dem_ev = self.results.get("Democratic", (0, 0))[1]
-        gop_ev = self.results.get("Republican", (0, 0))[1]
+        dem_ev = self.results.get(DEM, (0, 0))[1]
+        gop_ev = self.results.get(GOP, (0, 0))[1]
         if dem_ev >= self.min_ev_needed:
-            ec_winner = "Democratic"
+            ec_winner = DEM
         elif gop_ev >= self.min_ev_needed:
-            ec_winner = "Republican"
+            ec_winner = GOP
         else:
             return None  # 269-269 tie or no majority — no tipping point exists
 
@@ -463,8 +459,8 @@ class Election:
             "TIED": "gray",
         }
 
-        dem_ev = self.results["Democratic"][1]
-        gop_ev = self.results["Republican"][1]
+        dem_ev = self.results[DEM][1]
+        gop_ev = self.results[GOP][1]
         tossup_ev = self.results.get("TossupEV", 0)
 
         fig = px.choropleth(
@@ -545,17 +541,17 @@ class Election:
 
             # Apply the appropriate directional swing for this slider step
             if s > 0:
-                self.apply_margin_swing_all_states("Democratic", abs(s))
+                self.apply_margin_swing_all_states(DEM, abs(s))
             elif s < 0:
-                self.apply_margin_swing_all_states("Republican", abs(s))
+                self.apply_margin_swing_all_states(GOP, abs(s))
             else:
                 self.determine_winner()
 
             df = build_frame_df(self)
             z = df["Winner"].apply(winner_to_code)
 
-            dem_ev = self.results["Democratic"][1]
-            gop_ev = self.results["Republican"][1]
+            dem_ev = self.results[DEM][1]
+            gop_ev = self.results[GOP][1]
             tossup_ev = self.results.get("TossupEV", 0)
 
             pv_party, pv_margin = self.get_popular_vote_margin()

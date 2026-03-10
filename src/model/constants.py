@@ -2,6 +2,13 @@
 Constants
 """
 
+# Party name constants — single source of truth used across model and visualization layers.
+# These values match the CSV column headers (Democratic, Republican, Other) exactly.
+DEM = "Democratic"
+GOP = "Republican"
+OTHER = "Other"
+TIED = "TIED"
+
 us_state_to_abbrev = {
     "Alabama": "AL",
     "Alaska": "AK",

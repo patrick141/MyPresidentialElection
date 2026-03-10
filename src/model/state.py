@@ -6,8 +6,7 @@ Stores both baseline and simulated vote results, tracks the winner, and supports
 vote shift and margin swing operations for simulation purposes.
 """
 
-OTHER_PARTY = "Other"
-TIED = "TIED"
+from src.model.constants import DEM, GOP, OTHER, TIED
 
 
 class State:
@@ -93,13 +92,13 @@ class State:
 
     def determine_winner(self):
         # Compares Democratic vs Republican vote totals to set the winner; ties become TIED
-        dem_vote = int(self._results.get("Democratic", 0) or 0)
-        gop_vote = int(self._results.get("Republican", 0) or 0)
+        dem_vote = int(self._results.get(DEM, 0) or 0)
+        gop_vote = int(self._results.get(GOP, 0) or 0)
 
         if dem_vote > gop_vote:
-            self._winner = "Democratic"
+            self._winner = DEM
         elif gop_vote > dem_vote:
-            self._winner = "Republican"
+            self._winner = GOP
         else:
             self._winner = TIED
 
@@ -153,10 +152,10 @@ class State:
     @staticmethod
     def get_other_party(o_party):
         # Returns the opposing major party; returns None for TIED or unknown inputs
-        if o_party == "Democratic":
-            return "Republican"
-        if o_party == "Republican":
-            return "Democratic"
+        if o_party == DEM:
+            return GOP
+        if o_party == GOP:
+            return DEM
         return None
 
     # -------------------------
@@ -191,14 +190,14 @@ class State:
 
         Example: 48D 49R 3O, swing D+5 => 50.5D 46.5R 3O
         """
-        if target_party not in ("Democratic", "Republican"):
+        if target_party not in (DEM, GOP):
             return
 
         self._results = self._normalize_results(self._results)
 
-        dem = int(self._results.get("Democratic", 0) or 0)
-        gop = int(self._results.get("Republican", 0) or 0)
-        other = int(self._results.get("Other", 0) or 0)
+        dem = int(self._results.get(DEM, 0) or 0)
+        gop = int(self._results.get(GOP, 0) or 0)
+        other = int(self._results.get(OTHER, 0) or 0)
 
         total = dem + gop + other
         if total <= 0:
@@ -206,7 +205,7 @@ class State:
 
         # Compute shifted percentages — half the swing added/removed from each side
         half = float(swing_points) / 2.0
-        if target_party == "Democratic":
+        if target_party == DEM:
             dem_target_pct = (dem / total) * 100.0 + half
             gop_target_pct = (gop / total) * 100.0 - half
         else:
@@ -247,9 +246,9 @@ class State:
         if new_gop < 0:
             new_gop = 0
 
-        self._results["Democratic"] = new_dem
-        self._results["Republican"] = new_gop
-        self._results["Other"] = new_other
+        self._results[DEM] = new_dem
+        self._results[GOP] = new_gop
+        self._results[OTHER] = new_other
 
         self.determine_winner()
 
@@ -268,9 +267,9 @@ class State:
         Preserves any extra party keys found in the input dict.
         """
         normalized = {}
-        normalized["Democratic"] = int(results.get("Democratic", 0) or 0)
-        normalized["Republican"] = int(results.get("Republican", 0) or 0)
-        normalized[OTHER_PARTY] = int(results.get(OTHER_PARTY, 0) or 0)
+        normalized[DEM] = int(results.get(DEM, 0) or 0)
+        normalized[GOP] = int(results.get(GOP, 0) or 0)
+        normalized[OTHER] = int(results.get(OTHER, 0) or 0)
 
         # Clamp any negatives to zero
         for k in list(normalized.keys()):
