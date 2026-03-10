@@ -11,6 +11,9 @@ GOP = "Republican"
 OTHER = "Other"
 
 # Load 2020 and 2024 election data from data/YEAR.csv
+e2008 = Election("2008")
+e2012 = Election("2012")
+e2016 = Election("2016")
 e2020 = Election("2020")
 e2024 = Election("2024")
 
@@ -31,4 +34,4 @@ e2024 = Election("2024")
 # e2024.reset_all_states()
 
 # Build and open the multi-year interactive map with year toggle (2020 / 2024)
-visualize_multi_year_slider([e2020, e2024])
+visualize_multi_year_slider([e2008, e2012, e2016, e2020, e2024])
