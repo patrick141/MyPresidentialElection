@@ -93,9 +93,11 @@ Click any state on the map to open a floating swing panel with an independent ±
 
 Completes the simulation engine with historical data coverage, analytical depth, and test coverage.
 
-## 🔲 Historical Data Pipeline
+## ✅ Historical Data Pipeline
 
-Normalize and integrate 2012 and 2016 election results into the existing multi-year framework. Extends the year toggle from 2 to 4 cycles and includes a reusable ingestion script for adding future election years.
+Normalized and integrated election results for 2000, 2004, 2008, 2012, and 2016 into the existing multi-year framework. Extends the year toggle to cover six cycles (2000–2024) and includes a reusable ingestion script (`scripts/build_year_csv.py`) for adding future election years.
+
+State-level vote totals are sourced from the **MIT Election Data + Science Lab** — *U.S. President 1976–2020* dataset (Harvard Dataverse, [doi:10.7910/DVN/42MVDX](https://doi.org/10.7910/DVN/42MVDX)). Congressional district results for Maine and Nebraska (ME-1, ME-2, NE-1, NE-2, NE-3) are sourced manually from Wikipedia state election result pages and cross-referenced against certified state totals.
 
 ## 🔲 Electoral College Bias Display
 
