@@ -1,5 +1,5 @@
 """
-Main entry point — instantiates Election objects and launches the interactive map.
+Main entry point: instantiates Election objects and launches the interactive map.
 """
 
 from src.model.election import Election
@@ -12,6 +12,15 @@ e2012 = Election("2012")
 e2016 = Election("2016")
 e2020 = Election("2020")
 e2024 = Election("2024")
+
+elections = [
+    #e2008,
+    #e2012,
+    #e2016,
+    e2020,
+    e2024,
+]
+    
 
 # --- Scenario Export (uncomment any block below to generate CSV/JSON files) ---
 # e2024.export_scenario("scenarios/2024_baseline.csv")
@@ -30,4 +39,4 @@ e2024 = Election("2024")
 # e2024.reset_all_states()
 
 # Build and open the multi-year interactive map with year toggle (2020 / 2024)
-visualize_multi_year_slider([e2008, e2012, e2016, e2020, e2024])
+visualize_multi_year_slider(elections)

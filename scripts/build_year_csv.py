@@ -1,5 +1,5 @@
 """
-build_year_csv.py — Normalize a MIT Election Lab CSV into the project's data schema.
+build_year_csv.py: Normalize a MIT Election Lab CSV into the project's data schema.
 
 Usage:
     python scripts/build_year_csv.py <year> [--mit <path>] [--out <path>]

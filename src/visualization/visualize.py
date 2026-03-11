@@ -453,6 +453,7 @@ def visualize_multi_year_slider(
         lats, lons, texts = _build_ev_label_trace_data(election)
         ev_label_data[election.label] = {"lat": lats, "lon": lons, "text": texts}
 
+
     # Each year button swaps the map to that year's baseline and rewires slider steps
     year_buttons = []
     for election in elections:
