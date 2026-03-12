@@ -587,5 +587,149 @@ def visualize_multi_year_slider(
 
     # Inject JS baseline data and interaction logic as a post-render script
     post_script = _build_per_state_post_script(baseline_js, default_key)
-    fig.show()
     fig.write_html(output_file, post_script=post_script)
+    import webbrowser
+    webbrowser.open(f"file://{os.path.abspath(output_file)}")
+    print(f"Map → {output_file}")
+
+
+# ---------------------------------------------------------------------------
+# Comparison visualization (side-by-side)
+# ---------------------------------------------------------------------------
+
+def visualize_comparison(
+    election_left,
+    election_right,
+    output_file="election_comparison.html",
+):
+    """
+    Renders two election maps side by side for visual comparison.
+    Typically used with Election.combine_party_results() to show cross-year
+    matchups (e.g. 2020 Dem votes vs 2024 GOP votes, next to actual 2024).
+
+    Each panel shows: state colors, EV totals, popular vote, tipping point, EC bias.
+    No sliders — static snapshot of each election's current state.
+    """
+
+    def _make_panel_traces(election_obj, geo_key):
+        """Returns (choropleth_trace, ev_label_trace) for one map panel."""
+        df = _build_state_df(election_obj)
+        z = df["Winner"].apply(_winner_to_code).tolist()
+
+        dem_ev    = election_obj.results["Democratic"][1]
+        gop_ev    = election_obj.results["Republican"][1]
+        dem_votes = election_obj.results["Democratic"][0]
+        gop_votes = election_obj.results["Republican"][0]
+        total     = election_obj.total_vote or 1
+        dem_pct   = dem_votes / total * 100
+        gop_pct   = gop_votes / total * 100
+
+        pv_party, pv_margin = election_obj.get_popular_vote_margin()
+        pv_label   = f"{pv_party[:3]} +{pv_margin:.2f}%"
+        bias_label = _get_ec_bias_label(election_obj)
+        _, tp_name = _get_tp_info(election_obj)
+
+        subtitle = (
+            f"Dem {dem_ev} EV · {dem_votes/1e6:.2f}M ({dem_pct:.2f}%)  vs  "
+            f"GOP {gop_ev} EV · {gop_votes/1e6:.2f}M ({gop_pct:.2f}%)"
+            f"<br>PV: {pv_label}  |  TP: {tp_name}  |  Bias: {bias_label}"
+        )
+
+        choro = go.Choropleth(
+            locations=df["State Abbr"],
+            z=z,
+            locationmode="USA-states",
+            zmin=-1, zmax=1,
+            colorscale=[[0, "royalblue"], [0.5, "lightgray"], [1, "crimson"]],
+            showscale=False,
+            geo=geo_key,
+            customdata=df[["Winner", "EV", "Margin"]].values,
+            hovertemplate=(
+                "<b>%{location}</b><br>"
+                "Winner: %{customdata[0]}<br>"
+                "EV: %{customdata[1]}<br>"
+                "Margin: %{customdata[2]}%"
+                "<extra></extra>"
+            ),
+            name=election_obj.label,
+        )
+
+        # EV labels — scattergeo coords must be tied to the correct geo domain
+        lats, lons, texts = _build_ev_label_trace_data(election_obj)
+        ev_labels = go.Scattergeo(
+            lat=lats, lon=lons, text=texts,
+            mode="text",
+            geo=geo_key,
+            textfont=dict(size=14, color="white", family="Arial Black"),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+
+        return choro, ev_labels, subtitle
+
+    choro_l, ev_l, subtitle_l = _make_panel_traces(election_left,  "geo")
+    choro_r, ev_r, subtitle_r = _make_panel_traces(election_right, "geo2")
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        specs=[[{"type": "choropleth"}, {"type": "choropleth"}]],
+        subplot_titles=[
+            f"<b>{election_left.label}</b>",
+            f"<b>{election_right.label}</b>",
+        ],
+        horizontal_spacing=0.02,
+    )
+
+    fig.add_trace(choro_l, row=1, col=1)
+    fig.add_trace(ev_l,    row=1, col=1)
+    fig.add_trace(choro_r, row=1, col=2)
+    fig.add_trace(ev_r,    row=1, col=2)
+
+    fig.update_layout(
+        title=dict(
+            text=f"Election Comparison: {election_left.label} vs {election_right.label}",
+            x=0.5,
+            font=dict(size=18),
+        ),
+        geo=dict(
+            scope="usa",
+            showlakes=True, lakecolor="white",
+            domain=dict(x=[0.0, 0.48], y=[0.05, 1.0]),
+        ),
+        geo2=dict(
+            scope="usa",
+            showlakes=True, lakecolor="white",
+            domain=dict(x=[0.52, 1.0], y=[0.05, 1.0]),
+        ),
+        # Subtitle annotations below each map header
+        annotations=[
+            # subplot_titles are at indices 0 & 1; add subtitles at indices 2 & 3
+            dict(
+                text=subtitle_l,
+                x=0.24, y=0.01,
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=11, color="#444"),
+                align="center",
+                xanchor="center",
+                yanchor="bottom",
+            ),
+            dict(
+                text=subtitle_r,
+                x=0.76, y=0.01,
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=11, color="#444"),
+                align="center",
+                xanchor="center",
+                yanchor="bottom",
+            ),
+        ],
+        height=550,
+        margin=dict(t=80, b=90, l=10, r=10),
+    )
+
+    fig.write_html(output_file)
+    import webbrowser
+    webbrowser.open(f"file://{os.path.abspath(output_file)}")
+    print(f"Comparison map → {output_file}")

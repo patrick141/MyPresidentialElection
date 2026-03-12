@@ -420,6 +420,48 @@ class Election:
         # Returns a filtered list of states won by the given party
         return [state for state in self.states if state.get_winner() == party]
 
+    @classmethod
+    def combine_party_results(cls, election_a, party_a, election_b, party_b, label=None):
+        """
+        Creates a synthetic Election combining party_a votes from election_a
+        with party_b votes from election_b. Other votes are set to 0 (pure 2-party race).
+
+        The Democratic slot always receives party_a votes; the Republican slot receives
+        party_b votes. Only states present in both elections are included.
+
+        Example:
+            synthetic = Election.combine_party_results(e2020, DEM, e2024, GOP,
+                                                       label="2020 Dem vs 2024 GOP")
+        """
+        b_lookup = {s.get_name(): s for s in election_b.states}
+
+        states = []
+        for state_a in election_a.states:
+            name = state_a.get_name()
+            state_b = b_lookup.get(name)
+            if state_b is None:
+                continue
+            dem_votes = state_a.get_vote_by_party(party_a)
+            gop_votes = state_b.get_vote_by_party(party_b)
+            s = State(name, state_a.get_ev(),
+                      unit_type=state_a._unit_type,
+                      parent_state=state_a.get_parent_state())
+            s.set_results({DEM: dem_votes, GOP: gop_votes, OTHER: 0})
+            states.append(s)
+
+        inst = cls.__new__(cls)
+        inst.states = states
+        inst.results = {}
+        inst.min_ev_needed = 270
+        inst.total_vote = 0
+        inst.winner = None
+        inst.df = None
+        inst.year = election_a.year
+        inst._data_path = None
+        inst.label = label or f"{election_a.label} {party_a[:3]} vs {election_b.label} {party_b[:3]}"
+        inst.determine_winner()
+        return inst
+
     # -------------------------
     # Visualization helpers
     # -------------------------
